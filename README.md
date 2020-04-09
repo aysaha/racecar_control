@@ -8,14 +8,14 @@ cd gym
 pip install -e '.[box2d]'
 ```
 
-Ddependencies:
+Dependencies:
 ```
 pip install -r requirements.txt
 ```
 
 
 ## Demo Program
-To run the demo program, run:
+Run:
 ```
 python demo.py
 ```
