@@ -17,7 +17,7 @@ pip install -r requirements.txt
 ## Demo Program
 Run:
 ```
-python demo.py
+python src/demo.py
 ```
 
 Use the arrow keys to:
