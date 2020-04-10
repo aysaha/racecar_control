@@ -65,7 +65,7 @@ def main(args):
     gym.logger.set_level(gym.logger.ERROR)
 
     # create environment
-    env = gym.make('CarRacing-v1', verbose=0).env
+    env = gym.make('CarRacing-v1').env
 
     # initialize environment
     state, track = env.reset()
