@@ -13,7 +13,6 @@ Dependencies:
 pip install -r requirements.txt
 ```
 
-
 ## Demo Program
 Run:
 ```
@@ -32,3 +31,8 @@ The sensors at the bottom of the screen measure the following from left to right
 3. chassis speed
 4. front wheel angle
 5. chassis angular velocity
+
+## Development
+Environment: `gym/gym/envs/box2d/car_racing.py`
+
+Dynamics: `gym/gym/envs/box2d/car_dynamics.py`
