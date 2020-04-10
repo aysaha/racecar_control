@@ -14,11 +14,11 @@ DONE = False
 
 def key_press(k, mod):
     global ACTION, DONE
-    if k == key.Q:        DONE = True
     if k == key.LEFT:     ACTION[0] = -1.0
     if k == key.RIGHT:    ACTION[0] = +1.0
     if k == key.UP:       ACTION[1] = +1.0
     if k == key.DOWN:     ACTION[2] = +0.8
+    if k == key.Q:        DONE = True
 
 def key_release(k, mod):
     global ACTION
