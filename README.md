@@ -1,23 +1,20 @@
 # racecar_control
 EECS 206B Final Project
 
-## Installation
-Environment:
-```
-cd gym
-pip install -e '.[box2d]'
-```
+## Download
+``
+git clone https://github.com/aysaha/racecar_control.git --recurse-submodules
+``
 
-Dependencies:
-```
-pip install -r requirements.txt
-```
+## Installation
+``
+pip install -r requirements.txt -e './gym[box2d]'
+``
 
 ## Demo Program
-Run:
-```
+``
 python src/demo.py
-```
+``
 
 Use the arrow keys to:
 - accelerate
