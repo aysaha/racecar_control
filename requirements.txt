@@ -1,2 +1,5 @@
 numpy
+matplotlib
 pyglet
+inputs
+keras
