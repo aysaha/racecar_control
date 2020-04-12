@@ -11,14 +11,14 @@ from utils import *
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
-def get_controller(ctrl, env):
-    print("[{}] creating {} controller".format(FILE, ctrl))
+def get_controller(control, env):
+    print("[{}] creating {} controller".format(FILE, control))
 
-    if ctrl == 'robot':
+    if control == 'robot':
         controller = RobotController(env.viewer.window)
-    elif ctrl == 'keyboard':
+    elif control == 'keyboard':
         controller = KeyboardController(env.viewer.window)
-    elif ctrl == 'xbox':
+    elif control == 'xbox':
         controller = XboxController()
     else:
         controller = None
@@ -115,7 +115,7 @@ class XboxController():
         self.process.start()
 
     def monitor_controller(self):
-        while self.B.value == 0:
+        while True:
             time.sleep(0.001)
             events = inputs.get_gamepad()
 

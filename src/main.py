@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 import os
 import argparse
@@ -25,6 +25,7 @@ def print_state(state):
 
 def plot_trajectory(track, car, model=None, data=None):
     print("[{}] plotting trajectory".format(FILE))
+
     # plot track
     track = np.vstack((track, track[0]))
     plt.plot(track[:, 2], track[:, 3], '-', linewidth=16, color='#666666', label="Track")
@@ -49,9 +50,9 @@ def plot_trajectory(track, car, model=None, data=None):
     plt.show()
 
 def main(args):
-    assert args.controller in ['robot', 'keyboard', 'xbox']
-    assert args.input is None or os.path.splitext(args.input)[1] == '.h5'
-    assert args.output is None or os.path.splitext(args.output)[1] == '.npz'
+    assert args.control in ['robot', 'keyboard', 'xbox']
+    assert args.dataset is None or os.path.splitext(args.dataset)[1] == '.npz'
+    assert args.model is None or os.path.splitext(args.model)[1] == '.h5'
 
     # set logging level
     gym.logger.set_level(gym.logger.ERROR)
@@ -62,19 +63,19 @@ def main(args):
     state, track = env.reset()
 
     # initialize controller
-    controller = controllers.get_controller(args.controller, env)
-
-    # initialize model
-    if args.input is not None:
-        model = learning.load_model(args.input)
-    else:
-        model = None
+    controller = controllers.get_controller(args.control, env)
 
     # initialize dataset
-    if args.output is not None and os.path.exists(args.output):
-        saved_data, saved_labels = learning.load_dataset(args.output)
+    if args.dataset is not None and os.path.exists(args.dataset):
+        saved_data, saved_labels = learning.load_dataset(args.dataset)
     else:
         saved_data, saved_labels = [], []
+
+    # initialize model
+    if args.model is not None:
+        model = learning.load_model(args.model)
+    else:
+        model = None
 
     # start environment
     print("[{}] running environment".format(FILE))
@@ -102,16 +103,16 @@ def main(args):
     env.close()
 
     # save dataset
-    if args.output is not None:
-        learning.save_dataset(args.output, saved_data + data, saved_labels + labels)
+    if args.dataset is not None:
+        learning.save_dataset(args.dataset, saved_data + data, saved_labels + labels)
 
     # visualize trajectory
     plot_trajectory(track, labels, model=model, data=data)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('controller')
-    parser.add_argument('-i', '--input', metavar='model')
-    parser.add_argument('-o', '--output', metavar='dataset')
+    parser.add_argument('-c', '--control', metavar='control', default='keyboard')
+    parser.add_argument('-d', '--dataset', metavar='dataset', default='data/dynamics.npz')
+    parser.add_argument('-m', '--model', metavar='model', default='models/dynamics.h5')
     args = parser.parse_args()
     main(args)

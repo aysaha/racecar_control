@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 import os
 import argparse
@@ -10,8 +10,8 @@ from keras import models, layers, optimizers, utils
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
-EPOCHS = 100               # number of epochs to train the model
-BATCH_SIZE = 64           # training data batch size
+EPOCHS = 1000
+BATCH_SIZE = 1024
 
 def save_dataset(path, data, labels):
     print("[{}] saving dataset ({})".format(FILE, path))
@@ -42,10 +42,10 @@ def load_model(path):
 def build_model(inputs, outputs, summary=False):
     model = models.Sequential()
 
-    model.add(layers.Dense(16, activation='relu', input_shape=(inputs,)))
-    model.add(layers.Dense(16, activation='relu'))
-    model.add(layers.Dense(16, activation='relu'))
-    model.add(layers.Dense(16, activation='relu'))
+    model.add(layers.Dense(64, activation='relu', input_shape=(inputs,)))
+    model.add(layers.Dense(64, activation='relu'))
+    model.add(layers.Dense(64, activation='relu'))
+    model.add(layers.Dense(64, activation='relu'))
     model.add(layers.Dense(outputs, activation='linear'))
     model.compile(loss='mse', optimizer='rmsprop', metrics=['acc'])
 
@@ -55,7 +55,7 @@ def build_model(inputs, outputs, summary=False):
     return model
 
 def k_fold_cross_validation(data, labels, epochs, batch_size, K=4):
-    result = {'loss': [], 'acc': [], 'val_loss': [], 'val_acc': []}
+    results = {'loss': [], 'acc': [], 'val_loss': [], 'val_acc': []}
     samples = data.shape[0] // K
 
     for i in range(K):
@@ -75,33 +75,32 @@ def k_fold_cross_validation(data, labels, epochs, batch_size, K=4):
         # train model
         history = model.fit(train_data, train_labels,
                             validation_data=(val_data, val_labels),
-                            epochs=epochs,
-                            batch_size=batch_size)
+                            epochs=epochs, batch_size=batch_size)
 
         # record scores
-        result['loss'].append(history.history['loss'])
-        result['acc'].append(history.history['acc'])
-        result['val_loss'].append(history.history['val_loss'])
-        result['val_acc'].append(history.history['val_acc'])
+        results['loss'].append(history.history['loss'])
+        results['acc'].append(history.history['acc'])
+        results['val_loss'].append(history.history['val_loss'])
+        results['val_acc'].append(history.history['val_acc'])
 
         print("")
 
     # average results
-    result['loss'] = np.mean(result['loss'], axis=0)
-    result['acc'] = np.mean(result['acc'], axis=0)
-    result['val_loss'] = np.mean(result['val_loss'], axis=0)
-    result['val_acc'] = np.mean(result['val_acc'], axis=0)
+    results['loss'] = np.mean(results['loss'], axis=0)
+    results['acc'] = np.mean(results['acc'], axis=0)
+    results['val_loss'] = np.mean(results['val_loss'], axis=0)
+    results['val_acc'] = np.mean(results['val_acc'], axis=0)
 
-    return result
+    return results
 
-def plot_training(epochs, result):
+def plot_training(epochs, results):
     print("[{}] plotting training results".format(FILE))
     plt.subplots(2)
 
     # loss
     plt.subplot(2, 1, 1)  
-    plt.plot(epochs, result['loss'], '--b', label="Training")
-    plt.plot(epochs, result['val_loss'], '-g', label="Validation")
+    plt.plot(epochs, results['loss'], '--b', label="Training")
+    plt.plot(epochs, results['val_loss'], '-g', label="Validation")
     plt.title('Model Performance')
     plt.ylabel('Loss')
     plt.grid()
@@ -109,8 +108,8 @@ def plot_training(epochs, result):
 
     # accuracy
     plt.subplot(2, 1, 2)  
-    plt.plot(epochs, result['acc'], '--b', label="Training")
-    plt.plot(epochs, result['val_acc'], '-g', label="Validation")
+    plt.plot(epochs, results['acc'], '--b', label="Training")
+    plt.plot(epochs, results['val_acc'], '-g', label="Validation")
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy')
     plt.grid()
@@ -120,18 +119,18 @@ def plot_training(epochs, result):
 
 def main(args):
     assert os.path.splitext(args.dataset)[1] == '.npz'
-    assert args.output is None or os.path.splitext(args.output)[1] == '.h5'
+    assert args.model is None or os.path.splitext(args.model)[1] == '.h5'
 
     # format dataset
     data, labels = load_dataset(args.dataset, shuffle=True)
     data, labels = np.array(data), np.array(labels)
 
-    if args.output is None:
+    if args.model is None:
         # perform K-fold cross-validation
-        result = k_fold_cross_validation(data, labels, EPOCHS, BATCH_SIZE)
+        results = k_fold_cross_validation(data, labels, EPOCHS, BATCH_SIZE)
 
         # visualize training
-        plot_training(np.arange(EPOCHS), result)
+        plot_training(np.arange(EPOCHS), results)
     else:
         # build model
         model = build_model(data.shape[1], labels.shape[1], summary=True)
@@ -140,11 +139,11 @@ def main(args):
         model.fit(data, labels, epochs=EPOCHS, batch_size=BATCH_SIZE)
 
         # save model
-        save_model(args.output, model)
+        save_model(args.model, model)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('dataset')
-    parser.add_argument('-o', '--output', metavar='model')
+    parser.add_argument('-d', '--dataset', metavar='dataset', default='data/dynamics.npz')
+    parser.add_argument('-m', '--model', metavar='model')
     args = parser.parse_args()
     main(args)

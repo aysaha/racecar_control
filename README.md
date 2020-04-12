@@ -1,4 +1,4 @@
-# racecar_control
+# Self-Driving Racecar
 EECS 206B Final Project
 
 ## Download
