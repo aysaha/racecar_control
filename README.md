@@ -8,19 +8,19 @@ EECS 206B Final Project
 ``pip install -r requirements.txt -e './gym[box2d]'``
 
 ## Running
-### Playing with a Keyboard
+Playing with a keyboard  
 ``python src/main.py keyboard``
 
-### Playing with an Xbox Controller
+Playing with an Xbox controller  
 ``python src/main.py xbox``
 
-### Recording System Dynamics
+Recording system dynamics  
 ``python src/main.py keyboard -o data/dynamics.npz``
 
-### Learning System Dynamics
+Learning system dynamics  
 ``python src/main.py keyboard data/dynamics.npz  -o models/dynamics.h5``
 
-### Testing System Dynamics
+Testing system dynamics  
 ``python src/main.py keyboard -i models/dynamics.h5``
 
 ## Development
