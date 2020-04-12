@@ -18,7 +18,7 @@ EECS 206B Final Project
 ``python src/main.py keyboard -o data/dynamics.npz``
 
 #### Learning System Dynamics
-``python src/main.py keyboard data/dynamics.npz  -o models/dynamics.h5``
+``python src/learning.py data/dynamics.npz  -o models/dynamics.h5``
 
 #### Testing System Dynamics
 ``python src/main.py keyboard -i models/dynamics.h5``
