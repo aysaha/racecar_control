@@ -11,6 +11,20 @@ from utils import *
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
+def get_controller(ctrl, env):
+    print("[{}] creating {} controller".format(FILE, ctrl))
+
+    if ctrl == 'robot':
+        controller = RobotController(env.viewer.window)
+    elif ctrl == 'keyboard':
+        controller = KeyboardController(env.viewer.window)
+    elif ctrl == 'xbox':
+        controller = XboxController()
+    else:
+        controller = None
+
+    return controller
+
 class RobotController():
     def __init__(self, window):
         self.done = False

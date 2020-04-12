@@ -7,10 +7,25 @@ EECS 206B Final Project
 ## Installation
 ``pip install -r requirements.txt -e './gym[box2d]'``
 
-## Demo Program
-``python src/main.py``
+## Running
+### Playing with a Keyboard
+``python src/main.py keyboard``
 
+### Playing with an Xbox Controller
+``python src/main.py xbox``
+
+### Recording System Dynamics
+``python src/main.py keyboard -o data/dynamics.npz``
+
+### Learning System Dynamics
+``python src/main.py keyboard data/dynamics.npz  -o models/dynamics.h5``
+
+### Testing System Dynamics
+``python src/main.py keyboard -i models/dynamics.h5``
 
 ## Development
+Main: `src/learning.py`  
+Controllers:`src/controllers.py`  
+Learning: `src/learning.py`  
 Environment: `gym/gym/envs/box2d/car_racing.py`  
 Dynamics: `gym/gym/envs/box2d/car_dynamics.py`
