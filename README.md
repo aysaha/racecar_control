@@ -9,22 +9,16 @@ EECS 206B Final Project
 
 ## Running
 #### Playing with a Keyboard
-``python src/main.py keyboard``
+``python src/main.py -c keyboard``
 
 #### Playing with an Xbox Controller
-``python src/main.py xbox``
-
-#### Recording System Dynamics
-``python src/main.py keyboard -o data/dynamics.npz``
+``python src/main.py -c xbox``
 
 #### Learning System Dynamics
-``python src/learning.py data/dynamics.npz  -o models/dynamics.h5``
-
-#### Testing System Dynamics
-``python src/main.py keyboard -i models/dynamics.h5``
+``python src/learning.py -d data/dynamics.npz  -m models/dynamics.h5``
 
 ## Development
-Main: `src/learning.py`  
+Main: `src/main.py`  
 Controllers:`src/controllers.py`  
 Learning: `src/learning.py`  
 Environment: `gym/gym/envs/box2d/car_racing.py`  

@@ -1,5 +1,6 @@
 numpy
+scipy
 matplotlib
-inputs
 pyglet
+inputs
 keras

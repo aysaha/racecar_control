@@ -42,10 +42,10 @@ def load_model(path):
 def build_model(inputs, outputs, summary=False):
     model = models.Sequential()
 
-    model.add(layers.Dense(64, activation='relu', input_shape=(inputs,)))
-    model.add(layers.Dense(64, activation='relu'))
-    model.add(layers.Dense(64, activation='relu'))
-    model.add(layers.Dense(64, activation='relu'))
+    model.add(layers.Dense(16, activation='relu', input_shape=(inputs,)))
+    model.add(layers.Dense(16, activation='relu'))
+    model.add(layers.Dense(16, activation='relu'))
+    model.add(layers.Dense(16, activation='relu'))
     model.add(layers.Dense(outputs, activation='linear'))
     model.compile(loss='mse', optimizer='rmsprop', metrics=['acc'])
 
@@ -118,7 +118,7 @@ def plot_training(epochs, results):
     plt.show()
 
 def main(args):
-    assert os.path.splitext(args.dataset)[1] == '.npz'
+    assert os.path.exists(args.dataset) and os.path.splitext(args.dataset)[1] == '.npz'
     assert args.model is None or os.path.splitext(args.model)[1] == '.h5'
 
     # format dataset
@@ -129,7 +129,7 @@ def main(args):
         # perform K-fold cross-validation
         results = k_fold_cross_validation(data, labels, EPOCHS, BATCH_SIZE)
 
-        # visualize training
+        # plot training
         plot_training(np.arange(EPOCHS), results)
     else:
         # build model
@@ -143,7 +143,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('-d', '--dataset', metavar='dataset', default='data/dynamics.npz')
+    parser.add_argument('-d', '--dataset', metavar='dataset', default='datasets/dynamics.npz')
     parser.add_argument('-m', '--model', metavar='model')
     args = parser.parse_args()
     main(args)

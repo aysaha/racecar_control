@@ -13,16 +13,6 @@ import learning
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
-def print_state(state):
-    string = ""
-    string += "x = {:7.2f} m | ".format(state[0])
-    string += "y = {:7.2f} m | ".format(state[1])
-    string += "theta = {:4.2f} rad | ".format(state[2])
-    string += "v_x = {:7.2f} m/s | ".format(state[3])
-    string += "v_y = {:7.2f} m/s | ".format(state[4])
-    string += "omega = {:6.2f} rad".format(state[5]) 
-    print(string)
-
 def plot_trajectory(track, car, model=None, data=None):
     print("[{}] plotting trajectory".format(FILE))
 
@@ -50,53 +40,43 @@ def plot_trajectory(track, car, model=None, data=None):
     plt.show()
 
 def main(args):
-    assert args.control in ['robot', 'keyboard', 'xbox']
     assert args.dataset is None or os.path.splitext(args.dataset)[1] == '.npz'
-    assert args.model is None or os.path.splitext(args.model)[1] == '.h5'
-
+    assert os.path.exists(args.model) and os.path.splitext(args.model)[1] == '.h5'
+    assert args.control in ['robot', 'keyboard', 'xbox']
+    
     # set logging level
     gym.logger.set_level(gym.logger.ERROR)
 
     # create environment
     print("[{}] creating environment".format(FILE))
     env = gym.make('CarRacing-v1').env
-    state, track = env.reset()
+    state = env.reset()
+    data, labels= [], []
+    done = False
+    t = 0
 
-    # initialize controller
-    controller = controllers.get_controller(args.control, env)
-
-    # initialize dataset
+    # load dataset
     if args.dataset is not None and os.path.exists(args.dataset):
         saved_data, saved_labels = learning.load_dataset(args.dataset)
     else:
         saved_data, saved_labels = [], []
 
-    # initialize model
-    if args.model is not None:
-        model = learning.load_model(args.model)
-    else:
-        model = None
+    # load model
+    model = learning.load_model(args.model)
 
-    # start environment
-    print("[{}] running environment".format(FILE))
-    data, labels= [], []
-    done = False
-    t = 0
+    # initialize controller
+    controller = controllers.get_controller(args.control, model, env)
 
+    # run simulation
+    print("[{}] running simulation (t = {})".format(FILE, t))
     while not done:
-        # display environment
         env.render()
-
-        # control logic
         action, done = controller.step(state)
-
-        # perform action and record dynamics
         data.append(np.concatenate((state, action)))
         state = env.step(action)
         labels.append(np.array(state))
-
-        # increment time
         t += 1
+    print("[{}] stopping simulation (t = {})".format(FILE, t))
 
     # close environment
     print("[{}] closing environment".format(FILE))
@@ -106,13 +86,13 @@ def main(args):
     if args.dataset is not None:
         learning.save_dataset(args.dataset, saved_data + data, saved_labels + labels)
 
-    # visualize trajectory
-    plot_trajectory(track, labels, model=model, data=data)
+    # plot trajectory
+    plot_trajectory(env.track, labels, model=model, data=data)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('-c', '--control', metavar='control', default='keyboard')
-    parser.add_argument('-d', '--dataset', metavar='dataset', default='data/dynamics.npz')
+    parser.add_argument('-d', '--dataset', metavar='dataset')
     parser.add_argument('-m', '--model', metavar='model', default='models/dynamics.h5')
+    parser.add_argument('-c', '--control', metavar='control', default='keyboard')
     args = parser.parse_args()
     main(args)
