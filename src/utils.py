@@ -72,7 +72,7 @@ def transform_vector(g, v):
     assert v.shape == (2,) or v.shape == (2, 1)
     return (g @ np.append(v, 0))[:-1]
 
-# converts from cartesian to polar
+# converts a point from cartesian to polar
 def polar(p):
     assert p.shape == (2,) or p.shape == (2, 1)
     x, y = p
@@ -80,10 +80,32 @@ def polar(p):
     theta = np.arctan2(y, x)
     return np.array([r, theta])
 
-# converts from polar to cartesian
+# converts a point from polar to cartesian
 def cartesian(p):
     assert p.shape == (2,) or p.shape == (2, 1)
     r, theta = p
     x = r*np.cos(theta)
     y = r*np.sin(theta)
     return np.array([x, y])
+
+# approximates system dynamics with a learned model
+def dynamics(q, u, model):
+    assert q.shape == (6,) or q.shape == (6, 1)
+    assert u.shape == (3,) or u.shape == (3, 1)
+    assert model is not None
+    return model.predict(np.concatenate((q, u)).reshape(1, -1))[0]
+
+# estimates system dynamics over a horizon
+def horizon(q0, u, model, N):
+    assert q0.shape == (6,) or q0.shape == (6, 1)
+    assert u.shape == (N, 3) or u.shape == (N, 3)
+    assert model is not None
+    assert N > 0
+
+    q = np.zeros((N+1, q0.shape[0]))
+    q[0] = q0
+    
+    for i in range(N):
+        q[i+1] = dynamics(q[i], u[i], model)
+    
+    return q[1:]

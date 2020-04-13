@@ -10,8 +10,8 @@ from keras import models, layers, optimizers, utils
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
-EPOCHS = 1000
-BATCH_SIZE = 1024
+EPOCHS = 100
+BATCH_SIZE = 32
 
 def save_dataset(path, data, labels):
     print("[{}] saving dataset ({})".format(FILE, path))
@@ -45,7 +45,6 @@ def build_model(inputs, outputs, summary=False):
     model.add(layers.Dense(16, activation='relu', input_shape=(inputs,)))
     model.add(layers.Dense(16, activation='relu'))
     model.add(layers.Dense(16, activation='relu'))
-    model.add(layers.Dense(16, activation='relu'))
     model.add(layers.Dense(outputs, activation='linear'))
     model.compile(loss='mse', optimizer='rmsprop', metrics=['acc'])
 
@@ -59,7 +58,7 @@ def k_fold_cross_validation(data, labels, epochs, batch_size, K=4):
     samples = data.shape[0] // K
 
     for i in range(K):
-        print("Processing fold {}/{}".format(i+1, K))
+        print("[{}] processing fold ({}/{})".format(FILE, i+1, K))
 
         # validation data and lables
         val_data = data[samples*i:samples*(i+1)]
@@ -82,7 +81,6 @@ def k_fold_cross_validation(data, labels, epochs, batch_size, K=4):
         results['acc'].append(history.history['acc'])
         results['val_loss'].append(history.history['val_loss'])
         results['val_acc'].append(history.history['val_acc'])
-
         print("")
 
     # average results

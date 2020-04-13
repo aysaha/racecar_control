@@ -7,14 +7,12 @@ from scipy import optimize
 from pyglet.window import key
 import inputs
 
-import matplotlib.pyplot as plt
-
 from utils import *
 
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
-def get_controller(control, model, env):
+def initialize_controller(control, model, env):
     print("[{}] initializing {} controller".format(FILE, control))
 
     if control == 'robot':
@@ -37,8 +35,6 @@ class RobotController():
         self.q_max = np.array(env.observation_space.high)
         self.u_min = np.array(env.action_space.low)
         self.u_max = np.array(env.action_space.high)
-        self.u = None
-        self.t = 0
 
         env.viewer.window.on_key_press = self.on_key_press
 
@@ -95,107 +91,69 @@ class RobotController():
 
         return np.array([steer, accel, brake])
 
-    def model_predictive_control(self, state, N=10, M=10):
-        def plot(track, trajectory, q, u, N):
-            print("[{}] plotting trajectory".format(FILE))
-
-            # plot track
-            track = np.vstack((track, track[0]))
-            plt.plot(track[:, 2], track[:, 3], '-', linewidth=16, color='#666666', label="Track")
-
-            # plot trajectory
-            plt.plot(trajectory[:, 0], trajectory[:, 1], '-', marker='o', color='#CC6600', label="Trajectory")
-            
-            # generate prediction
-            prediction = np.zeros((N + 1, 6))
-            u = u.reshape((N, 3))
-
-            for k in range(N):
-                prediction[k] = q
-                q = F(q, u[k])
-
-            prediction[N] = q
-
-            # plot prediction
-            plt.plot(prediction[:, 0], prediction[:, 1], '-', marker='o', color='#0066CC', label="Prediction")
-
-            # format plot
-            plt.grid(which='major', color='#CCCCCC')
-            plt.grid(which='minor', color='#DDDDDD')
-            plt.minorticks_on()
-            plt.title('MPC')
-            plt.xlabel('x')
-            plt.ylabel('y')
-            plt.legend(borderpad=1.2, handletextpad=1.2)
-            plt.show()
-
-        def F(q, u):
-            return self.model.predict(np.concatenate((q, u)).reshape(1, -1))[0]
-
+    def model_predictive_control(self, state, N=10):
         def J(u, q_i, q_d, N):
             Q = np.diag([1, 1, 0, 0, 0, 0])
             R = np.diag([0, 0, 0])
 
             q = q_i
-            u = u.reshape((N, 3))
+            u = u.reshape((-1, 3))
             cost = 0
 
             for k in range(N):
                 cost += (q - q_d[k]).T @ Q @ (q - q_d[k]) + u[k].T @ R @ u[k]
-                q = F(q, u[k])
+                q = dynamics(q, u[k], self.model)
 
             cost += (q - q_d[N]).T @ Q @ (q - q_d[N])
 
             return cost
 
-        if self.u is None:
-            print("[{}] starting optimization".format(FILE))
-            index = np.linalg.norm(self.track[:, -2:] - state[:2], axis=1).argmin()
-            start = index
-            end = (start + (N + 1)) % len(self.track)
-            trajectory = self.track[start:end, -2:]
+        print("[{}] starting optimization".format(FILE))
 
-            q_i = state
-            q_d = np.hstack((trajectory, np.zeros(((N+1), 4))))
+        # create reference trajectory
+        index = np.linalg.norm(self.track[:, -2:] - state[:2], axis=1).argmin()
+        start = index
+        end = (start + (N + 1)) % len(self.track)
+        trajectory = self.track[start:end, -2:]
 
-            u = np.tile([0, 1, 0], N)
+        # initialize optimization variables
+        q_i = state
+        q_d = np.hstack((trajectory, np.zeros(((N+1), 4))))
+        u = np.tile([0, 1, 0], N)
 
-            #bounds = N * [(lower, upper) for lower, upper in zip(self.u_min, self.u_max)]
-            #solution = optimize.minimize(J, u, args=(q_i, q_d, N), method='SLSQP', bounds=bounds)
+        # bounds on control inputs
+        bounds = (np.tile(self.u_min, N), np.tile(self.u_max, N))
 
-            #solution = optimize.differential_evolution(J, bounds, args=(q_i, q_d, N), disp=True)
+        # nonlinear least-squares optimization
+        solution = optimize.least_squares(J, u, args=(q_i, q_d, N), bounds=bounds, verbose=2)
 
-            bounds = (np.tile(self.u_min, N), np.tile(self.u_max, N))
-            solution = optimize.least_squares(J, u, args=(q_i, q_d, N), bounds=bounds,
-                                              ftol=None, gtol=None, verbose=2)
+        if solution.success:
+            print("[{}] optimization succeeded".format(FILE))
+        else:
+            print("[{}] optimization failed".format(FILE))
 
-            if solution.success:
-                print("[{}] optimization succeeded".format(FILE))
-            else:
-                print("[{}] optimization failed".format(FILE))
+        # format and display solution
+        u = solution.x.reshape((-1, 3))
+        print(u)
 
-            self.u = solution.x.reshape((N, 3))
-            self.t = 0
+        raise NotImplementedError
 
-            print(self.u)
-            plot(self.track, trajectory, q_i, self.u, N)
-            exit()
+    def model_predictive_path_integral_control(self, state):
+        # TODO
+        # x, y, theta, v_x, v_y, omega = state
+        # alpha, beta, x, y = self.track[i]
+        raise NotImplementedError
 
-        action = self.u[self.t // M]
-        self.t += 1
-
-        if self.t == N * M:
-            self.u = None
-            self.t = 0
-
-        return action
-
-    def machine_learning_control(state):
+    def machine_learning_control(self, state):
+        # TODO
+        # x, y, theta, v_x, v_y, omega = state
+        # alpha, beta, x, y = self.track[i]
         raise NotImplementedError
 
     def step(self, state):
         action = self.basic_control(state)
         #action = self.model_predictive_control(state)
+        #action = self.model_predictive_path_integral_control(state)
         #action = self.machine_learning_control(state)
 
         return action, self.done
