@@ -11,9 +11,9 @@ EECS 206B Final Project
 ``python src/learning.py -d data/dynamics.npz  -m models/dynamics.h5``
 
 ## Running Simulation
-Computer: `python src/main.py`
-User (Keyboard): `python src/main.py -c keyboard`
-User (Xbox Controller): `python src/main.py -c xbox`
+Computer: `python src/main.py`  
+User (Keyboard): `python src/main.py -c keyboard`  
+User (Xbox Controller): `python src/main.py -c xbox`  
 
 ## Development
 Main: `src/main.py`  
