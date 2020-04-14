@@ -87,25 +87,3 @@ def cartesian(p):
     x = r*np.cos(theta)
     y = r*np.sin(theta)
     return np.array([x, y])
-
-# approximates system dynamics with a learned model
-def dynamics(q, u, model):
-    assert q.shape == (6,) or q.shape == (6, 1)
-    assert u.shape == (3,) or u.shape == (3, 1)
-    assert model is not None
-    return model.predict(np.concatenate((q, u)).reshape(1, -1))[0]
-
-# estimates system dynamics over a horizon
-def horizon(q0, u, model, N):
-    assert q0.shape == (6,) or q0.shape == (6, 1)
-    assert u.shape == (N, 3) or u.shape == (N, 3)
-    assert model is not None
-    assert N > 0
-
-    q = np.zeros((N+1, q0.shape[0]))
-    q[0] = q0
-    
-    for i in range(N):
-        q[i+1] = dynamics(q[i], u[i], model)
-    
-    return q[1:]

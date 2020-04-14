@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 
 import os
+import time
 import argparse
 
 import numpy as np
 import matplotlib.pyplot as plt
-from keras import models, layers, optimizers, utils
+from keras import models, layers
 
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
@@ -13,22 +14,49 @@ DIRECTORY = os.path.dirname(__file__)
 EPOCHS = 100
 BATCH_SIZE = 32
 
-def save_dataset(path, data, labels):
+def dynamics(q, u, model):
+    assert q.shape == (6,) or q.shape == (6, 1)
+    assert u.shape == (3,) or q.shape == (3, 1)
+    assert model is not None
+
+    q = q.reshape(1, -1)
+    u = u.reshape(1, -1)
+    F = model.predict([q, u])[0]
+
+    return F
+
+def horizon(q, u, model, N):
+    assert q.shape == (6,) or q.shape == (6, 1)
+    assert u.shape == (N, 3)
+    assert model is not None
+    assert N > 0
+
+    q = np.vstack((q, np.zeros((N, q.shape[0]))))
+
+    for i in range(N):
+        q[i+1] = dynamics(q[i], u[i], model)
+    
+    return q[1:]
+
+def save_dataset(path, q, u, F):
     print("[{}] saving dataset ({})".format(FILE, path))
-    data, labels = np.array(data), np.array(labels)
-    np.savez_compressed(path, data=data, labels=labels)
+
+    if os.path.exists(path):
+        contents = np.load(path)
+        q, u, F = np.vstack((contents['q'], q)), np.vstack((contents['u'], u)), np.vstack((contents['F'], F))
+
+    np.savez_compressed(path, q=q, u=u, F=F)
 
 def load_dataset(path, shuffle=False):
     print("[{}] loading dataset ({})".format(FILE, path))
     contents = np.load(path)
-    data, labels = contents['data'], contents['labels']
+    q, u, F = contents['q'], contents['u'], contents['F']
 
     if shuffle is True:
-        p = np.random.permutation(min(len(data), len(labels)))
-        data, labels = data[p], labels[p]
+        p = np.random.permutation(q.shape[0])
+        q, u, F = q[p], u[p], F[p]
 
-    data, labels = list(data), list(labels)
-    return data, labels
+    return q, u, F
 
 def save_model(path, model):
     print("[{}] saving model ({})".format(FILE, path))
@@ -36,112 +64,116 @@ def save_model(path, model):
 
 def load_model(path):
     print("[{}] loading model ({})".format(FILE, path))
-    model = models.load_model(path)
-    return model
+    return models.load_model(path)
 
-def build_model(inputs, outputs, summary=False):
-    model = models.Sequential()
+def build_model(N, M, config, summary=False):
+    # define input layers
+    q = layers.Input(shape=(N,), name='q')
+    u = layers.Input(shape=(M,), name='u')
+    q_u = layers.Concatenate(name ='q_u')([q, u])
 
-    model.add(layers.Dense(16, activation='relu', input_shape=(inputs,)))
-    model.add(layers.Dense(16, activation='relu'))
-    model.add(layers.Dense(16, activation='relu'))
-    model.add(layers.Dense(outputs, activation='linear'))
+    if config == 'nonlinear':
+        # define hidden layers
+        hidden_layer_1 = layers.Dense(16, activation='relu', name='hidden_layer_1')(q_u)
+        hidden_layer_2 = layers.Dense(16, activation='relu', name='hidden_layer_2')(hidden_layer_1)
+        hidden_layer_3 = layers.Dense(N, activation='linear', name='hidden_layer_3')(hidden_layer_2)
+        
+        # define output layer
+        F = layers.Reshape((N,), name='F')(hidden_layer_3)
+    elif config == 'affine':
+        # define hidden layers for f
+        hidden_layer_1f = layers.Dense(8, activation='relu', name='hidden_layer_1f')(q)
+        hidden_layer_2f = layers.Dense(8, activation='relu', name='hidden_layer_2f')(hidden_layer_1f)
+        hidden_layer_3f = layers.Dense(N, activation='linear', name='hidden_layer_3f')(hidden_layer_2f)
+        f = layers.Reshape((N,), name='f')(hidden_layer_3f)
+
+        # define hidden layers for g
+        hidden_layer_1g = layers.Dense(8, activation='relu', name='hidden_layer_1g')(q)
+        hidden_layer_2g = layers.Dense(8, activation='relu', name='hidden_layer_2g')(hidden_layer_1g)
+        hidden_layer_3g = layers.Dense(N*M, activation='linear', name='hidden_layer_3g')(hidden_layer_2g)
+        g = layers.Reshape((N, M), name='g')(hidden_layer_3g)
+        gu = layers.Dot(-1, name='gu')([g, u])  
+
+        # define output layer
+        F = layers.Add(name='F')([f, gu])
+    elif config == 'linear':
+        # define hidden layers for A
+        hidden_layer_1A = layers.Dense(8, activation='relu', name='hidden_layer_1A')(q_u)
+        hidden_layer_2A = layers.Dense(8, activation='relu', name='hidden_layer_2A')(hidden_layer_1A)
+        hidden_layer_3A = layers.Dense(N*N, activation='linear', name='hidden_layer_3A')(hidden_layer_2A)
+        A = layers.Reshape((N, N), name='A')(hidden_layer_3A)
+        Aq = layers.Dot(-1, name='Aq')([A, q])
+
+        # define hidden layers for B
+        hidden_layer_1B = layers.Dense(8, activation='relu', name='hidden_layer_1B')(q_u)
+        hidden_layer_2B = layers.Dense(8, activation='relu', name='hidden_layer_2B')(hidden_layer_1B)
+        hidden_layer_3B = layers.Dense(N*M, activation='linear', name='hidden_layer_3B')(hidden_layer_2B)
+        B = layers.Reshape((N, M), name='B')(hidden_layer_3B)
+        Bu = layers.Dot(-1, name='Bu')([B, u])
+
+        # define output layer
+        F = layers.Add(name='F')([Aq, Bu])
+    
+    # define model
+    model = models.Model(inputs=[q, u], outputs=F, name=config)
     model.compile(loss='mse', optimizer='rmsprop', metrics=['acc'])
 
+    # show summary
     if summary is True:
         model.summary()
 
     return model
 
-def k_fold_cross_validation(data, labels, epochs, batch_size, K=4):
-    results = {'loss': [], 'acc': [], 'val_loss': [], 'val_acc': []}
-    samples = data.shape[0] // K
-
-    for i in range(K):
-        print("[{}] processing fold ({}/{})".format(FILE, i+1, K))
-
-        # validation data and lables
-        val_data = data[samples*i:samples*(i+1)]
-        val_labels = labels[samples*i:samples*(i+1)]
-
-        # training data and labels
-        train_data = np.concatenate([data[:samples*i], data[samples*(i+1):]], axis=0)
-        train_labels = np.concatenate([labels[:samples*i], labels[samples*(i+1):]], axis=0)
-
-        # build model
-        model = build_model(data.shape[1], labels.shape[1])
-
-        # train model
-        history = model.fit(train_data, train_labels,
-                            validation_data=(val_data, val_labels),
-                            epochs=epochs, batch_size=batch_size)
-
-        # record scores
-        results['loss'].append(history.history['loss'])
-        results['acc'].append(history.history['acc'])
-        results['val_loss'].append(history.history['val_loss'])
-        results['val_acc'].append(history.history['val_acc'])
-        print("")
-
-    # average results
-    results['loss'] = np.mean(results['loss'], axis=0)
-    results['acc'] = np.mean(results['acc'], axis=0)
-    results['val_loss'] = np.mean(results['val_loss'], axis=0)
-    results['val_acc'] = np.mean(results['val_acc'], axis=0)
-
-    return results
-
 def plot_training(epochs, results):
     print("[{}] plotting training results".format(FILE))
-    plt.subplots(2)
+    plt.subplots(2, num='training_results')
 
-    # loss
+    # plot training loss
     plt.subplot(2, 1, 1)  
-    plt.plot(epochs, results['loss'], '--b', label="Training")
-    plt.plot(epochs, results['val_loss'], '-g', label="Validation")
-    plt.title('Model Performance')
+    plt.plot(epochs, results['loss'])
+    plt.title('Training Results')
     plt.ylabel('Loss')
     plt.grid()
-    plt.legend()
 
-    # accuracy
+    # plot training accuracy
     plt.subplot(2, 1, 2)  
-    plt.plot(epochs, results['acc'], '--b', label="Training")
-    plt.plot(epochs, results['val_acc'], '-g', label="Validation")
+    plt.plot(epochs, results['acc'])
     plt.xlabel('Epoch')
     plt.ylabel('Accuracy')
     plt.grid()
-    plt.legend()
 
     plt.show()
 
 def main(args):
     assert os.path.exists(args.dataset) and os.path.splitext(args.dataset)[1] == '.npz'
-    assert args.model is None or os.path.splitext(args.model)[1] == '.h5'
+    assert os.path.splitext(args.model)[1] == '.h5'
+    assert args.config in ['nonlinear', 'affine', 'linear']
 
-    # format dataset
-    data, labels = load_dataset(args.dataset, shuffle=True)
-    data, labels = np.array(data), np.array(labels)
+    # load dataset
+    q, u, F = load_dataset(args.dataset, shuffle=True)
 
-    if args.model is None:
-        # perform K-fold cross-validation
-        results = k_fold_cross_validation(data, labels, EPOCHS, BATCH_SIZE)
+    # build model
+    print("{}".format('_' * 98))
+    model = build_model(q.shape[1], u.shape[1], config=args.config, summary=True)
 
-        # plot training
-        plot_training(np.arange(EPOCHS), results)
-    else:
-        # build model
-        model = build_model(data.shape[1], labels.shape[1], summary=True)
+    # train model
+    start = time.time()
+    history = model.fit([q, u], F, epochs=EPOCHS, batch_size=BATCH_SIZE)
+    end = time.time()
+    minutes, seconds = divmod(end-start, 60)
+    print("{}\n".format('_' * 98))
+    print("[{}] training completed ({}m {}s)".format(FILE, int(minutes), int(seconds)))
 
-        # train model
-        model.fit(data, labels, epochs=EPOCHS, batch_size=BATCH_SIZE)
+    # plot training
+    plot_training(np.arange(EPOCHS), history.history)
 
-        # save model
-        save_model(args.model, model)
+    # save model
+    save_model(args.model, model)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('-d', '--dataset', metavar='dataset', default='datasets/dynamics.npz')
-    parser.add_argument('-m', '--model', metavar='model')
+    parser.add_argument('-m', '--model', metavar='model', default='models/dynamics.h5')
+    parser.add_argument('-c', '--config', metavar='config', default='nonlinear')
     args = parser.parse_args()
     main(args)

@@ -7,6 +7,7 @@ from scipy import optimize
 from pyglet.window import key
 import inputs
 
+from learning import dynamics
 from utils import *
 
 FILE = os.path.basename(__file__)
