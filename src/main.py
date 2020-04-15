@@ -20,7 +20,7 @@ MODEL_COLOR = '#0066CC'
 MAJOR_GRID_COLOR = '#CCCCCC'
 MINOR_GRID_COLOR = '#DDDDDD'
 
-def plot_trajectory(track, car, model=None, data=None, N=10):
+def plot_trajectory(track, car, model=None, data=None, N=1):
     print("[{}] plotting trajectory".format(FILE))
     plt.figure(num='state_trajectory')
 
@@ -73,7 +73,7 @@ def plot_trajectory(track, car, model=None, data=None, N=10):
 
 def main(args):
     assert args.dataset is None or os.path.splitext(args.dataset)[1] == '.npz'
-    assert os.path.exists(args.model) and os.path.splitext(args.model)[1] == '.h5'
+    assert args.model in ['nonlinear', 'affine', 'linear']
     assert args.control in ['robot', 'keyboard', 'xbox']
 
     # create environment
@@ -86,7 +86,7 @@ def main(args):
     t = 0
 
     # load model
-    model = load_model(args.model)
+    model = load_model('models/dynamics_{}.h5'.format(args.model))
 
     # initialize controller
     controller = initialize_controller(args.control, model, env)
@@ -95,7 +95,7 @@ def main(args):
     print("[{}] running simulation (t = {})".format(FILE, t))
     while not done:
         env.render()
-        action, done = controller.step(state)
+        action, done = controller.step(state, t)
         q.append(np.array(state))
         u.append(np.array(action))
         state = env.step(action)
@@ -111,7 +111,7 @@ def main(args):
     if args.control == 'robot':
         plot_trajectory(env.track, F)
     else:
-        plot_trajectory(env.track, F, model=model, data=[q, u])
+        plot_trajectory(env.track, F, model=model, data=[q, u], N=10)
 
     # save dataset
     if args.dataset is not None:
@@ -120,7 +120,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('-d', '--dataset', metavar='dataset')
-    parser.add_argument('-m', '--model', metavar='model', default='models/dynamics.h5')
+    parser.add_argument('-m', '--model', metavar='model', default='nonlinear')
     parser.add_argument('-c', '--control', metavar='control', default='robot')
     args = parser.parse_args()
     main(args)

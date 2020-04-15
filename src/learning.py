@@ -11,7 +11,7 @@ from keras import models, layers
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
-EPOCHS = 100
+EPOCHS = 10
 BATCH_SIZE = 32
 
 def dynamics(q, u, model):
@@ -25,15 +25,15 @@ def dynamics(q, u, model):
 
     return F
 
-def horizon(q, u, model, N):
+def horizon(q, u, model, steps):
     assert q.shape == (6,) or q.shape == (6, 1)
-    assert u.shape == (N, 3)
+    assert u.shape == (steps, 3)
     assert model is not None
-    assert N > 0
+    assert steps > 0
 
-    q = np.vstack((q, np.zeros((N, q.shape[0]))))
+    q = np.vstack((q, np.zeros((steps, q.shape[0]))))
 
-    for i in range(N):
+    for i in range(steps):
         q[i+1] = dynamics(q[i], u[i], model)
     
     return q[1:]
@@ -66,67 +66,77 @@ def load_model(path):
     print("[{}] loading model ({})".format(FILE, path))
     return models.load_model(path)
 
-def build_model(N, M, config, summary=False):
+def build_model(form, N, M):
+    print("[{}] building model ({})".format(FILE, form))
+
     # define input layers
     q = layers.Input(shape=(N,), name='q')
     u = layers.Input(shape=(M,), name='u')
     q_u = layers.Concatenate(name ='q_u')([q, u])
 
-    if config == 'nonlinear':
+    if form == 'nonlinear':
         # define hidden layers
-        hidden_layer_1 = layers.Dense(16, activation='relu', name='hidden_layer_1')(q_u)
-        hidden_layer_2 = layers.Dense(16, activation='relu', name='hidden_layer_2')(hidden_layer_1)
-        hidden_layer_3 = layers.Dense(N, activation='linear', name='hidden_layer_3')(hidden_layer_2)
+        hidden_layer = layers.Dense(16, activation='relu', name='hidden_layer')(q_u)
+        output_layer = layers.Dense(N, activation='linear', name='output_layer')(hidden_layer)
         
         # define output layer
-        F = layers.Reshape((N,), name='F')(hidden_layer_3)
-    elif config == 'affine':
+        F = layers.Reshape((N,), name='F')(output_layer)
+    elif form == 'affine':
         # define hidden layers for f
-        hidden_layer_1f = layers.Dense(8, activation='relu', name='hidden_layer_1f')(q)
-        hidden_layer_2f = layers.Dense(8, activation='relu', name='hidden_layer_2f')(hidden_layer_1f)
-        hidden_layer_3f = layers.Dense(N, activation='linear', name='hidden_layer_3f')(hidden_layer_2f)
-        f = layers.Reshape((N,), name='f')(hidden_layer_3f)
+        hidden_layer_f = layers.Dense(8, activation='relu', name='hidden_layer_f')(q)
+        output_layer_f = layers.Dense(N, activation='linear', name='output_layer_f')(hidden_layer_f)
+        f = layers.Reshape((N,), name='f')(output_layer_f)
 
         # define hidden layers for g
-        hidden_layer_1g = layers.Dense(8, activation='relu', name='hidden_layer_1g')(q)
-        hidden_layer_2g = layers.Dense(8, activation='relu', name='hidden_layer_2g')(hidden_layer_1g)
-        hidden_layer_3g = layers.Dense(N*M, activation='linear', name='hidden_layer_3g')(hidden_layer_2g)
-        g = layers.Reshape((N, M), name='g')(hidden_layer_3g)
+        hidden_layer_g = layers.Dense(8, activation='relu', name='hidden_layer_g')(q)
+        output_layer_g = layers.Dense(N*M, activation='linear', name='output_layer_g')(hidden_layer_g)
+        g = layers.Reshape((N, M), name='g')(output_layer_g)
         gu = layers.Dot(-1, name='gu')([g, u])  
 
         # define output layer
         F = layers.Add(name='F')([f, gu])
-    elif config == 'linear':
+    elif form == 'linear':
         # define hidden layers for A
-        hidden_layer_1A = layers.Dense(8, activation='relu', name='hidden_layer_1A')(q_u)
-        hidden_layer_2A = layers.Dense(8, activation='relu', name='hidden_layer_2A')(hidden_layer_1A)
-        hidden_layer_3A = layers.Dense(N*N, activation='linear', name='hidden_layer_3A')(hidden_layer_2A)
-        A = layers.Reshape((N, N), name='A')(hidden_layer_3A)
+        hidden_layer_A = layers.Dense(8, activation='relu', name='hidden_layer_A')(q_u)
+        output_layer_A = layers.Dense(N*N, activation='linear', name='output_layer_A')(hidden_layer_A)
+        A = layers.Reshape((N, N), name='A')(output_layer_A)
         Aq = layers.Dot(-1, name='Aq')([A, q])
 
         # define hidden layers for B
-        hidden_layer_1B = layers.Dense(8, activation='relu', name='hidden_layer_1B')(q_u)
-        hidden_layer_2B = layers.Dense(8, activation='relu', name='hidden_layer_2B')(hidden_layer_1B)
-        hidden_layer_3B = layers.Dense(N*M, activation='linear', name='hidden_layer_3B')(hidden_layer_2B)
-        B = layers.Reshape((N, M), name='B')(hidden_layer_3B)
+        hidden_layer_B = layers.Dense(8, activation='relu', name='hidden_layer_B')(q_u)
+        output_layer_B = layers.Dense(N*M, activation='linear', name='output_layer_B')(hidden_layer_B)
+        B = layers.Reshape((N, M), name='B')(output_layer_B)
         Bu = layers.Dot(-1, name='Bu')([B, u])
 
         # define output layer
         F = layers.Add(name='F')([Aq, Bu])
     
-    # define model
-    model = models.Model(inputs=[q, u], outputs=F, name=config)
+    # create model
+    model = models.Model(inputs=[q, u], outputs=F, name=form)
     model.compile(loss='mse', optimizer='rmsprop', metrics=['acc'])
-
-    # show summary
-    if summary is True:
-        model.summary()
 
     return model
 
-def plot_training(epochs, results):
+def train_model(model, q, u, F):
+    print("[{}] training started".format(FILE))
+    print("{}".format('_' * 98))
+    model.summary()
+
+    # record training progress
+    start = time.time()
+    history = model.fit([q, u], F, epochs=EPOCHS, batch_size=BATCH_SIZE)
+    end = time.time()
+
+    minutes, seconds = divmod(end-start, 60)
+    print("{}\n".format('_' * 98))
+    print("[{}] training completed ({}m {}s)".format(FILE, int(minutes), int(seconds)))
+    
+    return history.history
+
+def plot_training(results):
     print("[{}] plotting training results".format(FILE))
     plt.subplots(2, num='training_results')
+    epochs = np.arange(len(results['loss']))
 
     # plot training loss
     plt.subplot(2, 1, 1)  
@@ -146,34 +156,27 @@ def plot_training(epochs, results):
 
 def main(args):
     assert os.path.exists(args.dataset) and os.path.splitext(args.dataset)[1] == '.npz'
-    assert os.path.splitext(args.model)[1] == '.h5'
-    assert args.config in ['nonlinear', 'affine', 'linear']
+    assert args.model in ['nonlinear', 'affine', 'linear']
 
     # load dataset
     q, u, F = load_dataset(args.dataset, shuffle=True)
+    N, M = q.shape[1], u.shape[1]
 
     # build model
-    print("{}".format('_' * 98))
-    model = build_model(q.shape[1], u.shape[1], config=args.config, summary=True)
+    model = build_model(args.model, N, M)
 
     # train model
-    start = time.time()
-    history = model.fit([q, u], F, epochs=EPOCHS, batch_size=BATCH_SIZE)
-    end = time.time()
-    minutes, seconds = divmod(end-start, 60)
-    print("{}\n".format('_' * 98))
-    print("[{}] training completed ({}m {}s)".format(FILE, int(minutes), int(seconds)))
+    results = train_model(model, q, u, F)
 
     # plot training
-    plot_training(np.arange(EPOCHS), history.history)
+    #plot_training(results)
 
     # save model
-    save_model(args.model, model)
+    save_model('models/dynamics_{}.h5'.format(args.model), model)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('-d', '--dataset', metavar='dataset', default='datasets/dynamics.npz')
-    parser.add_argument('-m', '--model', metavar='model', default='models/dynamics.h5')
-    parser.add_argument('-c', '--config', metavar='config', default='nonlinear')
+    parser.add_argument('-m', '--model', metavar='model', default='nonlinear')
     args = parser.parse_args()
     main(args)

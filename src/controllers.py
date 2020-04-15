@@ -14,7 +14,7 @@ FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
 def initialize_controller(control, model, env):
-    print("[{}] initializing {} controller".format(FILE, control))
+    print("[{}] initializing controller ({})".format(FILE, control))
 
     if control == 'robot':
         controller = RobotController(model, env)
@@ -27,8 +27,9 @@ def initialize_controller(control, model, env):
 
     return controller
 
-class RobotController():
+class RobotController:
     def __init__(self, model, env):
+        self.action = np.array([0.0, 0.0, 0.0])
         self.done = False
         self.model = model
         self.track = np.array(env.track)
@@ -36,6 +37,7 @@ class RobotController():
         self.q_max = np.array(env.observation_space.high)
         self.u_min = np.array(env.action_space.low)
         self.u_max = np.array(env.action_space.high)
+        self.u = None
 
         env.viewer.window.on_key_press = self.on_key_press
 
@@ -43,7 +45,15 @@ class RobotController():
         if k == key.Q:
             self.done = True
 
-    def basic_control(self, state):
+    def random_control(self, state, t):
+        if t % 100 == 0:
+            u = (self.u_max - self.u_min) * np.random.rand(3) + self.u_min
+        else:
+            u = self.action
+
+        return u
+
+    def basic_control(self, state, t):
         ANGLE_LIMIT = np.pi/12
         VEL_LIMIT = 1
         STEER_GAIN = 0.25
@@ -86,80 +96,111 @@ class RobotController():
             brake =  BRAKE_GAIN - 1/np.square(vel)
 
         # saturate control
-        steer = np.clip(steer, -1, 1)
-        accel = np.clip(accel, 0, 1)
-        brake = np.clip(brake, 0, 0.8)
+        u = np.array([steer, accel, np.clip(brake, 0, 0.8)])
+        u = np.clip(u, self.u_min, self.u_max)
+        return u
 
-        return np.array([steer, accel, brake])
-
-    def model_predictive_control(self, state, N=10):
-        def J(u, q_i, q_d, N):
-            Q = np.diag([1, 1, 0, 0, 0, 0])
-            R = np.diag([0, 0, 0])
+    def model_predictive_control(self, state, t, T=1, H=4):
+        def J(u, q_i, q_d, H):
+            Q = np.diag([1, 1, 1, 1, 1, 0])
+            R = np.diag([1, 1, 1])
 
             q = q_i
             u = u.reshape((-1, 3))
             cost = 0
 
-            for k in range(N):
+            for k in range(H):
                 cost += (q - q_d[k]).T @ Q @ (q - q_d[k]) + u[k].T @ R @ u[k]
                 q = dynamics(q, u[k], self.model)
 
-            cost += (q - q_d[N]).T @ Q @ (q - q_d[N])
+            cost += (q - q_d[H]).T @ Q @ (q - q_d[H])
 
             return cost
 
-        print("[{}] starting optimization".format(FILE))
+        if t % (T*H) == 0:
+            #print("[{}] starting optimization".format(FILE))
+            
+            g = inv(twist_to_transform(state[:3]))
 
-        # create reference trajectory
-        index = np.linalg.norm(self.track[:, -2:] - state[:2], axis=1).argmin()
-        start = index
-        end = (start + (N + 1)) % len(self.track)
-        trajectory = self.track[start:end, -2:]
+            # create reference trajectory
+            index = np.linalg.norm(self.track[:, -2:] - state[:2], axis=1).argmin()
+            start = index
+            end = (start + (H + 1)) % len(self.track)
 
-        # initialize optimization variables
-        q_i = state
-        q_d = np.hstack((trajectory, np.zeros(((N+1), 4))))
-        u = np.tile([0, 1, 0], N)
+            if start > end:
+                trajectory = np.vstack((self.track[start:, -2:], self.track[:end, -2:]))
+            else:
+                trajectory = self.track[start:end, -2:]
 
-        # bounds on control inputs
-        bounds = (np.tile(self.u_min, N), np.tile(self.u_max, N))
+            trajectory = np.hstack((trajectory,  np.zeros(((H+1), 4))))
 
-        # nonlinear least-squares optimization
-        solution = optimize.least_squares(J, u, args=(q_i, q_d, N), bounds=bounds, verbose=2)
 
-        if solution.success:
-            print("[{}] optimization succeeded".format(FILE))
-        else:
-            print("[{}] optimization failed".format(FILE))
+            for i in range(H+1):
+                if i < H:
+                    trajectory[i, 3:5] = trajectory[i+1, :2] - trajectory[i, :2]
+                else:
+                    trajectory[i, 3:5] = trajectory[i-1, 3:5]
 
-        # format and display solution
-        u = solution.x.reshape((-1, 3))
-        print(u)
+                r, theta = polar(trajectory[i, 3:5])
+                trajectory[i, 2] = (theta + 2*np.pi) % 2*np.pi
 
-        raise NotImplementedError
+            # initialize optimization variables
+            q_i = state
+            q_d = trajectory
+            #u = np.tile(self.u_max-self.u_min, H) * np.random.rand(H*3) + np.tile(self.u_min, H)
 
-    def model_predictive_path_integral_control(self, state):
+            # -----------------------------------------------
+            
+            point = transform_point(g, trajectory[-1, :2])
+            d, phi = polar(point)
+
+            steer = 0.25 * -phi
+            accel = np.cos(phi)
+            brake = 0.0
+
+            u = np.array([steer, accel, brake])
+            u = np.clip(u, self.u_min, self.u_max)
+            u = np.tile(u, H)
+            
+            # -----------------------------------------------
+
+            # bounds on control inputs
+            bounds = (np.tile(self.u_min, H), np.tile(self.u_max, H))
+
+            # nonlinear least-squares optimization
+            solution = optimize.least_squares(J, u, args=(q_i, q_d, H), bounds=bounds, gtol=None, xtol=None)
+
+            if not solution.success:
+                print("[{}] optimization failed".format(FILE))
+
+            # format and display solution
+            self.u = solution.x.reshape((-1, 3))
+
+        index = (t // T) % H
+        return self.u[index]
+
+    def model_predictive_path_integral_control(self, state, t):
         # TODO
         # x, y, theta, v_x, v_y, omega = state
         # alpha, beta, x, y = self.track[i]
         raise NotImplementedError
 
-    def machine_learning_control(self, state):
+    def machine_learning_control(self, state, t):
         # TODO
         # x, y, theta, v_x, v_y, omega = state
         # alpha, beta, x, y = self.track[i]
         raise NotImplementedError
 
-    def step(self, state):
-        action = self.basic_control(state)
-        #action = self.model_predictive_control(state)
-        #action = self.model_predictive_path_integral_control(state)
-        #action = self.machine_learning_control(state)
+    def step(self, state, t):
+        #self.action = self.random_control(state, t)
+        #self.action = self.basic_control(state, t)
+        self.action = self.model_predictive_control(state, t)
+        #self.action = self.model_predictive_path_integral_control(state, t)
+        #self.action = self.machine_learning_control(state, t)
 
-        return action, self.done
+        return self.action, self.done
 
-class KeyboardController():
+class KeyboardController:
     def __init__(self, env):
         self.action = [0.0, 0.0, 0.0]
         self.done = False
@@ -196,10 +237,10 @@ class KeyboardController():
         if k == key.DOWN:
             self.action[2] = 0.0
 
-    def step(self, state):
+    def step(self, state, t):
         return np.array(self.action), self.done
 
-class XboxController():
+class XboxController:
     MAX_JOY_VAL = np.power(2, 15) - 1
     MAX_TRIG_VAL = np.power(2, 8) - 1
 
@@ -259,7 +300,7 @@ class XboxController():
                 elif event.code == 'BTN_TRIGGER_HAPPY3': self.UpDPad.value = event.state
                 elif event.code == 'BTN_TRIGGER_HAPPY4': self.DownDPad.value = event.state
 
-    def step(self, state):
+    def step(self, state, t):
         steer = np.clip(np.power(self.LeftJoystickX.value / XboxController.MAX_JOY_VAL, 3), -1, 1)
         accel = np.clip(np.power(self.RightTrigger.value / XboxController.MAX_TRIG_VAL, 2), 0, 1)
         brake = np.clip(np.power(self.LeftTrigger.value / XboxController.MAX_TRIG_VAL, 2), 0, 1)
