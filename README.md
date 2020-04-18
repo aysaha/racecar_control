@@ -8,7 +8,7 @@ EECS 206B Final Project
 ``pip install -r requirements.txt -e './gym[box2d]'``
 
 ## Learning System Dynamics
-``python src/learning.py --dataset data/dynamics.npz  --model models/dynamics.h5` --epochs 100
+``python src/learning.py --dataset data/dynamics.npz  --model models/dynamics.h5`` --epochs 100
 
 ## Running Simulation
 Computer: `python src/main.py`  

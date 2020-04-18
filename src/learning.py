@@ -9,6 +9,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from keras import models, layers
 
+from controllers import convert_state
+
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
@@ -16,7 +18,9 @@ def dynamics(z, u, dt, model):
     assert z.shape == (11,) or z.shape == (11, 1)
     assert u.shape == (3,) or u.shape == (3, 1)
 
-    tensor = np.hstack((z, u))
+    q_dot = convert_state(state)
+    
+    tensor = np.hstack((q_dot, u))
     layers = model.get_weights()
     L = len(layers)
     F = np.zeros((11,))
@@ -29,6 +33,18 @@ def dynamics(z, u, dt, model):
             tensor = np.tanh(layers[i].T @ tensor  + layers[i+1])
         else:
             tensor = layers[i].T @ tensor  + layers[i+1]
+
+
+    f = (F[:, 3:] - z[:, 3:]) / dt
+    q_bar = np.zeros((z.shape[0], z.shape[1]-3))
+
+    for i, state in enumerate(z):
+        x, y, theta, v_x, v_y, omega = state[:6]
+        g = twist_to_transform([x, y, theta])
+        g_inv = inv(g)
+        v = transform_vector(g_inv, [v_x, v_y])
+        q_bar[i] = np.concatenate(([v[0], v[1], omega], state[6:]))
+
 
     f = tensor
     F[3:] = z[3:] + f*dt
@@ -48,6 +64,7 @@ def horizon(z, u, dt, model, H):
 
 def save_dataset(path, z, u, F, limit=250000):
     print("[{}] saving dataset ({})".format(FILE, path))
+    z, u, F = np.array(z), np.array(u), np.array(F)
 
     if os.path.exists(path):
         contents = np.load(path)
@@ -92,9 +109,9 @@ def build_model(n, m):
     input_layer = layers.Concatenate(name ='input_layer')([z, u])
     hidden_layer_1 = layers.Dense(32, activation='tanh', name='hidden_layer_1')(input_layer)
     hidden_layer_2 = layers.Dense(32, activation='tanh', name='hidden_layer_2')(hidden_layer_1)
-    output_layer = layers.Dense(n-3, activation='linear', name='output_layer')(hidden_layer_2)
+    output_layer = layers.Dense(n, activation='linear', name='output_layer')(hidden_layer_2)
 
-    f = layers.Reshape((n-3,), name='f')(output_layer)
+    f = layers.Reshape((n,), name='f')(output_layer)
 
     model = models.Model(inputs=[z, u], outputs=f, name='dynamics')
     model.compile(loss='mse', optimizer='rmsprop', metrics=['acc'])
@@ -109,7 +126,9 @@ def train_model(model, z, u, F, dt, batch_size=32, epochs=10, verbose=False):
         model.summary()
 
     # format training data
-    f = (F[:, 3:] - z[:, 3:]) / dt
+    z = np.apply_along_axis(convert_state, 1, z)
+    F = np.apply_along_axis(convert_state, 1, F)
+    f = (F - z) / dt
 
     # record training progress
     start = time.time()
@@ -154,7 +173,7 @@ def main(args):
 
     # load dataset
     z, u, F = load_dataset(args.dataset)
-    n, m = z.shape[1], u.shape[1]
+    n, m = z.shape[1]-3, u.shape[1]
 
     # build model
     model = build_model(n, m)
