@@ -16,9 +16,9 @@ User (Keyboard): `python src/main.py --control keyboard`
 User (Xbox Controller): `python src/main.py --control xbox`  
 
 ## Development
-Main: `src/main.py
-Learning: `src/learning.py
-Planning: `src/planning.py`
+Main: `src/main.py`  
+Learning: `src/learning.py`  
+Planning: `src/planning.py`  
 Controllers:`src/controllers.py`  
 Environment: `gym/gym/envs/box2d/car_racing.py`  
 Dynamics: `gym/gym/envs/box2d/car_dynamics.py`
