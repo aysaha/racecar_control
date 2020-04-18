@@ -1,6 +1,6 @@
 numpy
-scipy
 matplotlib
 pyglet
 inputs
+casadi
 keras

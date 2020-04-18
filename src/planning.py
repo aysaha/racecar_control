@@ -1,21 +1,23 @@
 import os
 
 import numpy as np
-from scipy import optimize
-
-from learning import dynamics
 
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
-def plan_trajectory(model, env):
-    print("[{}] planning trajectory ({})".format(FILE))
+def plan_trajectory(env, T=15):
+    print("[{}] planning trajectory".format(FILE))
 
-    track = np.array(env.track)
-    q_min = np.array(env.observation_space.low)
-    q_max = np.array(env.observation_space.high)
-    u_min = np.array(env.action_space.low)
-    u_max = np.array(env.action_space.high)
+    waypoints = np.array(env.track)
+    M = waypoints.shape[0]
+    N = int(T/env.dt)
+    trajectory = np.zeros((N, 3))
 
-    # TODO
-    raise NotImplementedError
+    for i in range(N):
+        j = int(i * M/N)
+        alpha = (i * M/N) - j
+        theta, x, y = (1-alpha)*waypoints[j, 1:] + alpha*waypoints[(j+1) % M, 1:]
+        theta = (theta + np.pi/2) % (2*np.pi)
+        trajectory[i] = [x, y, theta]
+
+    return trajectory

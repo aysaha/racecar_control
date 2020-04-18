@@ -4,6 +4,7 @@ import os
 import time
 import argparse
 
+import gym
 import numpy as np
 import matplotlib.pyplot as plt
 from keras import models, layers
@@ -11,52 +12,67 @@ from keras import models, layers
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
-EPOCHS = 10
-BATCH_SIZE = 32
+def dynamics(z, u, dt, model):
+    assert z.shape == (11,) or z.shape == (11, 1)
+    assert u.shape == (3,) or u.shape == (3, 1)
 
-def dynamics(q, u, model):
-    assert q.shape == (6,) or q.shape == (6, 1)
-    assert u.shape == (3,) or q.shape == (3, 1)
-    assert model is not None
+    tensor = np.hstack((z, u))
+    layers = model.get_weights()
+    L = len(layers)
+    F = np.zeros((11,))
 
-    q = q.reshape(1, -1)
-    u = u.reshape(1, -1)
-    F = model.predict([q, u])[0]
+    F[:3] = z[:3] + z[3:6]*dt
+    F[2] = F[2] % (2*np.pi)
+
+    for i in range(0, L, 2):
+        if i < L-2:
+            tensor = np.tanh(layers[i].T @ tensor  + layers[i+1])
+        else:
+            tensor = layers[i].T @ tensor  + layers[i+1]
+
+    f = tensor
+    F[3:] = z[3:] + f*dt
 
     return F
 
-def horizon(q, u, model, steps):
-    assert q.shape == (6,) or q.shape == (6, 1)
-    assert u.shape == (steps, 3)
-    assert model is not None
-    assert steps > 0
+def horizon(z, u, dt, model, H):
+    assert z.shape == (11,) or z.shape == (11, 1)
+    assert u.shape == (H, 3)
 
-    q = np.vstack((q, np.zeros((steps, q.shape[0]))))
+    z = np.vstack((z, np.zeros((H, z.shape[0]))))
 
-    for i in range(steps):
-        q[i+1] = dynamics(q[i], u[i], model)
+    for i in range(H):
+        z[i+1] = dynamics(z[i], u[i], dt, model)
     
-    return q[1:]
+    return z[1:]
 
-def save_dataset(path, q, u, F):
+def save_dataset(path, z, u, F, limit=250000):
     print("[{}] saving dataset ({})".format(FILE, path))
 
     if os.path.exists(path):
         contents = np.load(path)
-        q, u, F = np.vstack((contents['q'], q)), np.vstack((contents['u'], u)), np.vstack((contents['F'], F))
+        z = np.vstack((contents['z'], z))
+        u = np.vstack((contents['u'], u))
+        F = np.vstack((contents['F'], F))
 
-    np.savez_compressed(path, q=q, u=u, F=F)
+    if z.shape[0] > limit:
+        p = np.random.permutation(limit)
+        z, u, F = z[p], u[p], F[p]
+
+    np.savez_compressed(path, z=z, u=u, F=F)
+    print("[{}] dataset saved ({} samples)".format(FILE, z.shape[0]))
 
 def load_dataset(path, shuffle=False):
     print("[{}] loading dataset ({})".format(FILE, path))
     contents = np.load(path)
-    q, u, F = contents['q'], contents['u'], contents['F']
+    z, u, F = contents['z'], contents['u'], contents['F']
 
     if shuffle is True:
-        p = np.random.permutation(q.shape[0])
-        q, u, F = q[p], u[p], F[p]
+        p = np.random.permutation(z.shape[0])
+        z, u, F = z[p], u[p], F[p]
 
-    return q, u, F
+    print("[{}] dataset loaded ({} samples)".format(FILE, z.shape[0]))
+    return z, u, F
 
 def save_model(path, model):
     print("[{}] saving model ({})".format(FILE, path))
@@ -64,84 +80,58 @@ def save_model(path, model):
 
 def load_model(path):
     print("[{}] loading model ({})".format(FILE, path))
-    return models.load_model(path)
+    model = models.load_model(path)
+    return model
 
-def build_model(form, N, M):
-    print("[{}] building model ({})".format(FILE, form))
+def build_model(n, m):
+    print("[{}] building model".format(FILE))
 
-    # define input layers
-    q = layers.Input(shape=(N,), name='q')
-    u = layers.Input(shape=(M,), name='u')
-    q_u = layers.Concatenate(name ='q_u')([q, u])
-
-    if form == 'nonlinear':
-        # define hidden layers
-        hidden_layer = layers.Dense(16, activation='relu', name='hidden_layer')(q_u)
-        output_layer = layers.Dense(N, activation='linear', name='output_layer')(hidden_layer)
-        
-        # define output layer
-        F = layers.Reshape((N,), name='F')(output_layer)
-    elif form == 'affine':
-        # define hidden layers for f
-        hidden_layer_f = layers.Dense(8, activation='relu', name='hidden_layer_f')(q)
-        output_layer_f = layers.Dense(N, activation='linear', name='output_layer_f')(hidden_layer_f)
-        f = layers.Reshape((N,), name='f')(output_layer_f)
-
-        # define hidden layers for g
-        hidden_layer_g = layers.Dense(8, activation='relu', name='hidden_layer_g')(q)
-        output_layer_g = layers.Dense(N*M, activation='linear', name='output_layer_g')(hidden_layer_g)
-        g = layers.Reshape((N, M), name='g')(output_layer_g)
-        gu = layers.Dot(-1, name='gu')([g, u])  
-
-        # define output layer
-        F = layers.Add(name='F')([f, gu])
-    elif form == 'linear':
-        # define hidden layers for A
-        hidden_layer_A = layers.Dense(8, activation='relu', name='hidden_layer_A')(q_u)
-        output_layer_A = layers.Dense(N*N, activation='linear', name='output_layer_A')(hidden_layer_A)
-        A = layers.Reshape((N, N), name='A')(output_layer_A)
-        Aq = layers.Dot(-1, name='Aq')([A, q])
-
-        # define hidden layers for B
-        hidden_layer_B = layers.Dense(8, activation='relu', name='hidden_layer_B')(q_u)
-        output_layer_B = layers.Dense(N*M, activation='linear', name='output_layer_B')(hidden_layer_B)
-        B = layers.Reshape((N, M), name='B')(output_layer_B)
-        Bu = layers.Dot(-1, name='Bu')([B, u])
-
-        # define output layer
-        F = layers.Add(name='F')([Aq, Bu])
+    z = layers.Input(shape=(n,), name='z')
+    u = layers.Input(shape=(m,), name='u')
     
-    # create model
-    model = models.Model(inputs=[q, u], outputs=F, name=form)
+    input_layer = layers.Concatenate(name ='input_layer')([z, u])
+    hidden_layer_1 = layers.Dense(32, activation='tanh', name='hidden_layer_1')(input_layer)
+    hidden_layer_2 = layers.Dense(32, activation='tanh', name='hidden_layer_2')(hidden_layer_1)
+    output_layer = layers.Dense(n-3, activation='linear', name='output_layer')(hidden_layer_2)
+
+    f = layers.Reshape((n-3,), name='f')(output_layer)
+
+    model = models.Model(inputs=[z, u], outputs=f, name='dynamics')
     model.compile(loss='mse', optimizer='rmsprop', metrics=['acc'])
 
     return model
 
-def train_model(model, q, u, F):
-    print("[{}] training started".format(FILE))
-    print("{}".format('_' * 98))
-    model.summary()
+def train_model(model, z, u, F, dt, batch_size=32, epochs=10, verbose=False):
+    print("[{}] training model".format(FILE))
+
+    if verbose:
+        print("{}".format('_' * 98))
+        model.summary()
+
+    # format training data
+    f = (F[:, 3:] - z[:, 3:]) / dt
 
     # record training progress
     start = time.time()
-    history = model.fit([q, u], F, epochs=EPOCHS, batch_size=BATCH_SIZE)
+    history = model.fit([z, u], f, batch_size=batch_size, epochs=epochs, verbose=verbose)
     end = time.time()
 
-    minutes, seconds = divmod(end-start, 60)
-    print("{}\n".format('_' * 98))
-    print("[{}] training completed ({}m {}s)".format(FILE, int(minutes), int(seconds)))
+    if verbose:
+        minutes, seconds = divmod(end-start, 60)
+        print("{}\n".format('_' * 98))
+        print("[{}] training completed ({}m {}s)".format(FILE, int(minutes), int(seconds)))
     
     return history.history
 
 def plot_training(results):
     print("[{}] plotting training results".format(FILE))
-    plt.subplots(2, num='training_results')
+    plt.figure(num='training')
     epochs = np.arange(len(results['loss']))
 
     # plot training loss
     plt.subplot(2, 1, 1)  
     plt.plot(epochs, results['loss'])
-    plt.title('Training Results')
+    plt.title('Training')
     plt.ylabel('Loss')
     plt.grid()
 
@@ -156,27 +146,32 @@ def plot_training(results):
 
 def main(args):
     assert os.path.exists(args.dataset) and os.path.splitext(args.dataset)[1] == '.npz'
-    assert args.model in ['nonlinear', 'affine', 'linear']
+    assert os.path.splitext(args.model)[1] == '.h5'
+
+    # get discretization time
+    gym.logger.set_level(gym.logger.ERROR)
+    dt = gym.make('CarRacing-v1').env.dt
 
     # load dataset
-    q, u, F = load_dataset(args.dataset, shuffle=True)
-    N, M = q.shape[1], u.shape[1]
+    z, u, F = load_dataset(args.dataset)
+    n, m = z.shape[1], u.shape[1]
 
     # build model
-    model = build_model(args.model, N, M)
+    model = build_model(n, m)
 
     # train model
-    results = train_model(model, q, u, F)
+    results = train_model(model, z, u, F, dt, epochs=args.epochs, verbose=True)
 
-    # plot training
-    #plot_training(results)
+    # plot training results
+    plot_training(results)
 
     # save model
-    save_model('models/dynamics_{}.h5'.format(args.model), model)
+    save_model(args.model, model)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('-d', '--dataset', metavar='dataset', default='datasets/dynamics.npz')
-    parser.add_argument('-m', '--model', metavar='model', default='nonlinear')
+    parser.add_argument('-m', '--model', metavar='model', default='models/dynamics.h5')
+    parser.add_argument('-e', '--epochs', metavar='epochs', default=100, type=int)
     args = parser.parse_args()
     main(args)

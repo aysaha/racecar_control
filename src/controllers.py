@@ -3,21 +3,21 @@ import time
 import multiprocessing
 
 import numpy as np
-from scipy import optimize
+import matplotlib.pyplot as plt
 from pyglet.window import key
 import inputs
+import casadi
 
-from learning import dynamics
 from utils import *
 
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
-def initialize_controller(control, model, env):
+def initialize_controller(control, trajectory, model, env):
     print("[{}] initializing controller ({})".format(FILE, control))
 
     if control == 'robot':
-        controller = RobotController(model, env)
+        controller = RobotController(trajectory, model, env)
     elif control == 'keyboard':
         controller = KeyboardController(env)
     elif control == 'xbox':
@@ -28,15 +28,17 @@ def initialize_controller(control, model, env):
     return controller
 
 class RobotController:
-    def __init__(self, model, env):
+    def __init__(self, trajectory, model, env):
         self.action = np.array([0.0, 0.0, 0.0])
         self.done = False
+        self.trajectory = trajectory
         self.model = model
-        self.track = np.array(env.track)
-        self.q_min = np.array(env.observation_space.low)
-        self.q_max = np.array(env.observation_space.high)
-        self.u_min = np.array(env.action_space.low)
-        self.u_max = np.array(env.action_space.high)
+        self.dt = env.dt
+        self.z_min = env.observation_space.low
+        self.z_max = env.observation_space.high
+        self.u_min = env.action_space.low
+        self.u_max = env.action_space.high
+        self.z = None
         self.u = None
 
         env.viewer.window.on_key_press = self.on_key_press
@@ -45,158 +47,188 @@ class RobotController:
         if k == key.Q:
             self.done = True
 
-    def random_control(self, state, t):
-        if t % 100 == 0:
-            u = (self.u_max - self.u_min) * np.random.rand(3) + self.u_min
-        else:
-            u = self.action
-
+    def random_control(self):
+        u = (self.u_max - self.u_min) * np.random.rand(3) + self.u_min
         return u
 
-    def basic_control(self, state, t):
-        ANGLE_LIMIT = np.pi/12
-        VEL_LIMIT = 1
-        STEER_GAIN = 0.25
-        ACCEL_GAIN = 0.01
-        BRAKE_GAIN = 0.35
+    def proportional_control(self, state, noise=0.0):
+        # controller gains
+        STEER_GAIN = 0.35
+        ACCEL_GAIN = 0.05
+        BRAKE_GAIN = 0.05
 
-        # calculate linear velocity
-        vel = np.linalg.norm(state[3:5])
+        # unpack state vector
+        x, y, theta, v_x, v_y, omega = state[:6]
 
-        # create target point
-        index = np.linalg.norm(self.track[:, -2:] - state[:2], axis=1).argmin()
-        index = (index + 10) % len(self.track)
-        waypoint = self.track[index, -2:]
+        # waypoint horizon
+        N = self.trajectory.shape[0]
+        H = N // 100
 
-        # get target point in car frame
-        g = twist_to_transform(state[:3])
+        # create waypoint
+        start = np.linalg.norm(self.trajectory[:, :2] - [x, y], axis=1).argmin()
+        end = (start + H) % N
+        waypoint = self.trajectory[end, :2]
+
+        # get waypoint in body frame
+        g = transform(x, y, theta)
         g_inv = inv(g)
         point = transform_point(g_inv, waypoint)
-        d, phi = polar(point)
+        r, psi = polar(point)
 
-        if abs(phi) < ANGLE_LIMIT:
-            # DRIVE
-            steer = STEER_GAIN * -phi
-            accel = ACCEL_GAIN * d*np.cos(phi)
+        # actual linear velocity
+        v = np.linalg.norm([v_x, v_y])
+
+        # desired linear velocity
+        v_d = np.linalg.norm(self.trajectory[end, :2] - self.trajectory[start, :2]) / self.dt / H
+        v_d *= abs(np.cos(psi))
+
+
+        # control is proportional to the error
+        steer = STEER_GAIN * -psi
+        accel = ACCEL_GAIN * (v_d - v)
+        brake = BRAKE_GAIN * (v - v_d)
+
+        # prevent stalling
+        if v < 10:
+            accel = 0.1
             brake = 0.0
-        elif abs(phi) < 2*ANGLE_LIMIT:
-            # COAST
-            steer = 2*STEER_GAIN * -phi
-            accel = 0.0
-            brake = 0.0
-        elif abs(vel) < VEL_LIMIT:
-            # SLOW
-            steer = 4*STEER_GAIN * -phi
-            accel = ACCEL_GAIN/4 * d*np.cos(phi)
-            brake =  0.0
-        else:
-            # BRAKE
-            steer = 4*STEER_GAIN * -phi
-            accel = 0.0
-            brake =  BRAKE_GAIN - 1/np.square(vel)
+
+        # limit brakes to prevent locking wheels
+        u = np.array([steer, accel, min(brake, 0.85)])
+
+        # add noise to control input
+        sigma = np.std([self.u_max, self.u_min], axis=0) * np.random.rand() * noise
+        u += sigma * np.random.randn(3)
 
         # saturate control
-        u = np.array([steer, accel, np.clip(brake, 0, 0.8)])
         u = np.clip(u, self.u_min, self.u_max)
         return u
 
-    def model_predictive_control(self, state, t, T=1, H=4):
-        def J(u, q_i, q_d, H):
-            Q = np.diag([1, 1, 1, 1, 1, 0])
-            R = np.diag([1, 1, 1])
+    def model_predictive_control(self, state, t, H=20):
+        def plot_mpc(q_ref, q_opt, u_opt, H):
+            assert q_ref.shape == (H+1, 3)
+            assert q_opt.shape == (H+1, 3)
+            assert u_opt.shape == (H, 3)
+            plt.figure(num='mpc')
 
-            q = q_i
-            u = u.reshape((-1, 3))
+            # control
+            plt.subplot(2, 1, 1)
+            plt.title('Model Predictive Control (H = {})'.format(H))
+            plt.plot(np.arange(H), u_opt[:, 0], '-o', color='C4', markersize=4, label='steering')
+            plt.plot(np.arange(H), u_opt[:, 1], '-o', color='C2', markersize=4, label='throttle')
+            plt.plot(np.arange(H), u_opt[:, 2], '-o', color='C3', markersize=4, label='brake')
+            plt.xlabel('step')
+            plt.ylim(-1, 1)
+            plt.legend()
+            plt.grid()
+
+            # position
+            plt.subplot(2, 2, 3)  
+            plt.plot(q_ref[:, 0], q_ref[:, 1], '-o', markersize=4, label='ref')
+            plt.plot(q_opt[:, 0], q_opt[:, 1], '--o', markersize=4, label='opt')
+            plt.xlabel('x')
+            plt.ylabel('y')
+            plt.legend()
+            plt.grid()
+
+            # orientation
+            plt.subplot(2, 2, 4)
+            plt.plot(np.arange(H+1), q_ref[:, 2], '-o', markersize=4, label='ref')
+            plt.plot(np.arange(H+1), q_opt[:, 2], '--o', markersize=4, label='opt')
+            plt.xlabel('step')
+            plt.ylabel('theta')
+            plt.ylim(0, 2*np.pi)
+            plt.legend()
+            plt.grid()
+
+            plt.show()
+
+        def dynamics(z, u):
+            assert z.shape == (11, 1)
+            assert u.shape == (3, 1)
+
+            tensor = casadi.vertcat(z, u)
+            layers = self.model.get_weights()
+            L = len(layers)
+
+            for i in range(0, L, 2):
+                if i < L-2:
+                    tensor = casadi.tanh(layers[i].T @ tensor  + layers[i+1])
+                else:
+                    tensor = layers[i].T @ tensor  + layers[i+1]
+
+            return tensor
+
+        def J(z, u, q_ref, H):
+            assert z.shape == (11, H+1)
+            assert u.shape == (3, H)
+            assert q_ref.shape == (3, H+1)
+
+            Q = np.diag([10, 10, 1])
+            R = np.diag([1, 1, 1])
             cost = 0
 
             for k in range(H):
-                cost += (q - q_d[k]).T @ Q @ (q - q_d[k]) + u[k].T @ R @ u[k]
-                q = dynamics(q, u[k], self.model)
+                cost += (z[:3, k] - q_ref[:, k]).T @ Q @ (z[:3, k] - q_ref[:, k]) + u[:, k].T @ R @ u[:, k]
 
-            cost += (q - q_d[H]).T @ Q @ (q - q_d[H])
+                f = dynamics(z[:, k], u[:, k])
+                z[:3, k+1] = z[:3, k] + z[3:6, k]*self.dt
+                z[2, k+1] = casadi.fmod(z[2, k+1], 2*np.pi)
+                z[3:, k+1] = z[3:, k] + f*self.dt
+
+            cost += (z[:3, H] - q_ref[:, H]).T @ Q @ (z[:3, H] - q_ref[:, H])
 
             return cost
 
-        if t % (T*H) == 0:
-            #print("[{}] starting optimization".format(FILE))
-            
-            g = inv(twist_to_transform(state[:3]))
+        N = int(t/self.dt)
 
+        if N % H == 0 or self.u is None:
             # create reference trajectory
-            index = np.linalg.norm(self.track[:, -2:] - state[:2], axis=1).argmin()
+            index = np.linalg.norm(self.trajectory[:, :2] - state[:2], axis=1).argmin()
             start = index
-            end = (start + (H + 1)) % len(self.track)
+            end = (start + (H+1)) % self.trajectory.shape[0]
 
             if start > end:
-                trajectory = np.vstack((self.track[start:, -2:], self.track[:end, -2:]))
+                q_ref = np.vstack((self.trajectory[start:], self.trajectory[:end])).T
             else:
-                trajectory = self.track[start:end, -2:]
+                q_ref = self.trajectory[start:end].T
 
-            trajectory = np.hstack((trajectory,  np.zeros(((H+1), 4))))
+            z_init = state
+            u_init = np.zeros((3, H))
+            u_init[1, :] = 1.0
 
+            opti = casadi.Opti()
 
-            for i in range(H+1):
-                if i < H:
-                    trajectory[i, 3:5] = trajectory[i+1, :2] - trajectory[i, :2]
-                else:
-                    trajectory[i, 3:5] = trajectory[i-1, 3:5]
+            z = opti.variable(11, H+1)
+            opti.set_initial(z[:3, :], q_ref)
 
-                r, theta = polar(trajectory[i, 3:5])
-                trajectory[i, 2] = (theta + 2*np.pi) % 2*np.pi
-
-            # initialize optimization variables
-            q_i = state
-            q_d = trajectory
-            #u = np.tile(self.u_max-self.u_min, H) * np.random.rand(H*3) + np.tile(self.u_min, H)
-
-            # -----------------------------------------------
+            u = opti.variable(3, H)
+            opti.set_initial(u, u_init)
             
-            point = transform_point(g, trajectory[-1, :2])
-            d, phi = polar(point)
+            opti.minimize(J(z, u, q_ref, H))
+            opti.subject_to(z[:, 0] == z_init)
 
-            steer = 0.25 * -phi
-            accel = np.cos(phi)
-            brake = 0.0
-
-            u = np.array([steer, accel, brake])
-            u = np.clip(u, self.u_min, self.u_max)
-            u = np.tile(u, H)
+            low = np.tile(self.u_min, H)
+            high = np.tile(self.u_max, H)
+            bounds = opti.bounded(low, casadi.vec(u), high)
+            opti.subject_to(bounds)
             
-            # -----------------------------------------------
+            opti.solver('ipopt', {'print_time': False}, {'print_level': 0})
+            sol = opti.solve()
+            z_opt = sol.value(z)
+            u_opt = sol.value(u)
 
-            # bounds on control inputs
-            bounds = (np.tile(self.u_min, H), np.tile(self.u_max, H))
+            plot_mpc(q_ref.T, z_opt[:3].T, u_opt.T, H)
 
-            # nonlinear least-squares optimization
-            solution = optimize.least_squares(J, u, args=(q_i, q_d, H), bounds=bounds, gtol=None, xtol=None)
+            self.z = z_opt.T
+            self.u = u_opt.T
 
-            if not solution.success:
-                print("[{}] optimization failed".format(FILE))
-
-            # format and display solution
-            self.u = solution.x.reshape((-1, 3))
-
-        index = (t // T) % H
-        return self.u[index]
-
-    def model_predictive_path_integral_control(self, state, t):
-        # TODO
-        # x, y, theta, v_x, v_y, omega = state
-        # alpha, beta, x, y = self.track[i]
-        raise NotImplementedError
-
-    def machine_learning_control(self, state, t):
-        # TODO
-        # x, y, theta, v_x, v_y, omega = state
-        # alpha, beta, x, y = self.track[i]
-        raise NotImplementedError
+        return self.u[N % H]
 
     def step(self, state, t):
-        #self.action = self.random_control(state, t)
-        #self.action = self.basic_control(state, t)
-        self.action = self.model_predictive_control(state, t)
-        #self.action = self.model_predictive_path_integral_control(state, t)
-        #self.action = self.machine_learning_control(state, t)
+        #self.action = self.random_control()
+        self.action = self.proportional_control(state)
+        #self.action = self.model_predictive_control(state, t)
 
         return self.action, self.done
 
@@ -238,7 +270,7 @@ class KeyboardController:
             self.action[2] = 0.0
 
     def step(self, state, t):
-        return np.array(self.action), self.done
+        return self.action, self.done
 
 class XboxController:
     MAX_JOY_VAL = np.power(2, 15) - 1
@@ -272,8 +304,10 @@ class XboxController:
         print("[{}] starting daemon process".format(FILE))
         self.process.daemon = True
         self.process.start()
+        time.sleep(3)
 
     def monitor_controller(self):
+        print("[{}] daemon process started".format(FILE))
         while True:
             time.sleep(0.001)
             events = inputs.get_gamepad()
