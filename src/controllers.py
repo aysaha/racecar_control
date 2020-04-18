@@ -13,6 +13,18 @@ from utils import *
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
+def convert_state(state):
+    x, y, theta, v_x, v_y, omega = state[:6]
+    g = twist_to_transform([x, y, theta])
+    g_inv = inv(g)
+    ad_g_inv = adj(g_inv)
+
+    v_spatial = np.array([v_x, v_y, omega])
+    v_body = ad_g_inv @ v_spatial
+    q_bar = np.concatenate((v_body, state[6:]))
+
+    return q_bar
+
 def initialize_controller(control, trajectory, model, env):
     print("[{}] initializing controller ({})".format(FILE, control))
 
@@ -70,7 +82,7 @@ class RobotController:
         waypoint = self.trajectory[end, :2]
 
         # get waypoint in body frame
-        g = transform(x, y, theta)
+        g = twist_to_transform([x, y, theta])
         g_inv = inv(g)
         point = transform_point(g_inv, waypoint)
         r, psi = polar(point)
@@ -81,7 +93,6 @@ class RobotController:
         # desired linear velocity
         v_d = np.linalg.norm(self.trajectory[end, :2] - self.trajectory[start, :2]) / self.dt / H
         v_d *= abs(np.cos(psi))
-
 
         # control is proportional to the error
         steer = STEER_GAIN * -psi
@@ -147,7 +158,8 @@ class RobotController:
             assert z.shape == (11, 1)
             assert u.shape == (3, 1)
 
-            tensor = casadi.vertcat(z, u)
+            q_bar = convert_state(z)
+            tensor = casadi.vertcat(q_bar, u)
             layers = self.model.get_weights()
             L = len(layers)
 

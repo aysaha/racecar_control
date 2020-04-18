@@ -7,7 +7,7 @@ import gym
 import numpy as np
 import matplotlib.pyplot as plt
 
-from learning import *
+from learning import horizon, load_model, save_dataset
 from planning import plan_trajectory
 from controllers import initialize_controller
 
@@ -121,7 +121,7 @@ def main(args):
         plot_simulation(env, F, model=model, data=[z, u], H=50)
 
     # save dataset
-    save_dataset(args.dataset, np.array(z), np.array(u), np.array(F))
+    save_dataset(args.dataset, z, u, F)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
