@@ -21,7 +21,8 @@ class AbstractAgent(ABC):
         self.config = config
         self.device = device
         self.memory = ReplayMemory(self.config['MEMORY_CAPACITY'])
-        self.eval_env = NormalizedActions(gym.make(**self.config['GAME']))
+        #self.eval_env = NormalizedActions(gym.make(**self.config['GAME']))
+        self.eval_env = gym.make('CarRacing-v1').env
         self.continuous = bool(self.eval_env.action_space.shape)
 
         self.state_size = self.eval_env.observation_space.shape[0]
@@ -71,7 +72,9 @@ class AbstractAgent(ABC):
                 steps = 0
                 while not done and steps < self.config['MAX_STEPS']:
                     action = self.select_action(state, evaluation=True)
-                    state, r, done, _ = self.eval_env.step(action)
+                    #state, r, done, _ = self.eval_env.step(action)
+                    state = self.eval_env.step(action)
+                    r = 1
                     if render:
                         self.eval_env.render()
                     if i == 0 and gif:

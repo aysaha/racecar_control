@@ -56,7 +56,9 @@ def train(Agent, args):
     print(f"\033[91m\033[1mDevice : {device}\nFolder : {folder}\033[0m")
 
     # Create gym environment and agent
-    env = NormalizedActions(gym.make(**config["GAME"]))
+    #env = NormalizedActions(gym.make(**config["GAME"]))
+    env = gym.make('CarRacing-v1').env
+
     model = Agent(device, folder, config)
 
     # Load model from a previous run
@@ -91,7 +93,13 @@ def train(Agent, args):
 
                 action = model.select_action(state, episode=episode)
 
-                next_state, reward, done, _ = env.step(action)
+                #Original code
+                #next_state, reward, done, _ = env.step(action)
+                next_state = env.step(action)
+                done = 0
+                reward = 1
+
+
                 episode_reward += reward
 
                 # Save transition into memory

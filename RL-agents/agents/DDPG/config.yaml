@@ -1,5 +1,6 @@
 
-GAME : "Pendulum-v0"
+#GAME : "Pendulum-v0"
+GAME : "CarRacing-v1"
 # GAME : "LunarLanderContinuous-v2"
 # GAME : "BipedalWalker-v2"
 # GAME : "RoboschoolHalfCheetah-v0"
