@@ -30,9 +30,9 @@ control: `u_n = [steering, throttle, brake]`
 - 0 <= brake <= 1
 
 state: `z_n = [x, y, theta, v_x, v_y, omega, phi, w_fl, w_fr, w_rl, w_rr] = [q, q_bar]`
-- `q_n = [x, y, theta]`: world position
-- `q_dot_n = [v_x, v_y, omega]`: world velocity
-- `q_bar_n = [q_dot, phi, w_fl, w_fr, w_rl, w_rr]`: velocity with steering angle and individual wheel speeds
+- `q_n = [x, y, theta]` - world position
+- `q_dot_n = [v_x, v_y, omega]` - world velocity
+- `q_bar_n = [q_dot, phi, w_fl, w_fr, w_rl, w_rr]` - velocity with steering angle and individual wheel speeds
 
 system: `z_n+1 = z_n + F(z_n, u_n) * dt`  
 kinematics: `q_n+1 = q_n + q_dot_n * dt`  
