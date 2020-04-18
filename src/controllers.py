@@ -218,7 +218,7 @@ class RobotController:
             z_opt = sol.value(z)
             u_opt = sol.value(u)
 
-            plot_mpc(q_ref.T, z_opt[:3].T, u_opt.T, H)
+            #plot_mpc(q_ref.T, z_opt[:3].T, u_opt.T, H)
 
             self.z = z_opt.T
             self.u = u_opt.T
@@ -227,8 +227,8 @@ class RobotController:
 
     def step(self, state, t):
         #self.action = self.random_control()
-        self.action = self.proportional_control(state)
-        #self.action = self.model_predictive_control(state, t)
+        #self.action = self.proportional_control(state)
+        self.action = self.model_predictive_control(state, t)
 
         return self.action, self.done
 
