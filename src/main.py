@@ -7,7 +7,7 @@ import gym
 import numpy as np
 import matplotlib.pyplot as plt
 
-from learning import horizon, load_model, save_dataset
+from learning import Agent, horizon, load_model, save_dataset
 from planning import plan_trajectory
 from controllers import initialize_controller
 
@@ -73,7 +73,7 @@ def plot_simulation(env, car, model=None, data=None, H=1):
 
 def main(args):
     assert os.path.splitext(args.dataset)[1] == '.npz'
-    assert os.path.exists(args.model) and os.path.splitext(args.model)[1] == '.h5'
+    assert os.path.splitext(args.model)[1] == '.h5' #!
     assert args.control in ['robot', 'keyboard', 'xbox']
 
     # create environment
@@ -81,17 +81,17 @@ def main(args):
     gym.logger.set_level(gym.logger.ERROR)
     env = gym.make('CarRacing-v1').env
     state = env.reset()
-    z, u, F = [], [], []
+    states, actions, observations = [], [], []
     done = False
-
-    # load model
-    model = load_model(args.model)
 
     # plan trajectory
     trajectory = plan_trajectory(env)
 
+    # initialize agent
+    #agent = Agent(args.model)
+
     # initialize controller
-    controller = initialize_controller(args.control, trajectory, model, env)
+    controller = initialize_controller(args.control, trajectory, env)
 
     # run simulation
     print("[{}] running simulation (t = {}s)".format(FILE, int(env.t)))
@@ -102,10 +102,17 @@ def main(args):
 
             # perform a simulation step and save dynamics
             action, done = controller.step(state, env.t)
-            z.append(np.array(state))
-            u.append(np.array(action))
+            states.append(np.array(state))
+            actions.append(np.array(action))
             state = env.step(action)
-            F.append(np.array(state))
+            observations.append(np.array(state))
+            
+            # save sample in agent buffer
+            #agent.save((states[-1], actions[-1], observations[-1]))
+
+            #if int(env.t/env.dt) % int(10/env.dt) == 0:
+            #    agent.train(env.dt, verbose=False)
+
         except KeyboardInterrupt:
             break
     print("[{}] stopping simulation (t = {}s)".format(FILE, int(env.t)))
@@ -116,12 +123,12 @@ def main(args):
 
     # plot simulation results
     if args.control == 'robot':
-        plot_simulation(env, F)
+        plot_simulation(env, observations)
     else:
-        plot_simulation(env, F, model=model, data=[z, u], H=50)
+        plot_simulation(env, observations, model=agent.model, data=(states, actions), H=50)
 
     # save dataset
-    save_dataset(args.dataset, z, u, F)
+    #save_dataset(args.dataset, z, u, F)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)

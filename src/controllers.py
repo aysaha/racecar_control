@@ -8,28 +8,17 @@ from pyglet.window import key
 import inputs
 import casadi
 
+from learning import save_model, load_model, build_model, train_model
 from utils import *
 
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
-def convert_state(state):
-    x, y, theta, v_x, v_y, omega = state[:6]
-    g = twist_to_transform([x, y, theta])
-    g_inv = inv(g)
-    ad_g_inv = adj(g_inv)
-
-    v_spatial = np.array([v_x, v_y, omega])
-    v_body = ad_g_inv @ v_spatial
-    q_bar = np.concatenate((v_body, state[6:]))
-
-    return q_bar
-
-def initialize_controller(control, trajectory, model, env):
+def initialize_controller(control, trajectory, env):
     print("[{}] initializing controller ({})".format(FILE, control))
 
     if control == 'robot':
-        controller = RobotController(trajectory, model, env)
+        controller = RobotController(trajectory, env)
     elif control == 'keyboard':
         controller = KeyboardController(env)
     elif control == 'xbox':
@@ -40,11 +29,10 @@ def initialize_controller(control, trajectory, model, env):
     return controller
 
 class RobotController:
-    def __init__(self, trajectory, model, env):
+    def __init__(self, trajectory, env):
         self.action = np.array([0.0, 0.0, 0.0])
         self.done = False
         self.trajectory = trajectory
-        self.model = model
         self.dt = env.dt
         self.z_min = env.observation_space.low
         self.z_max = env.observation_space.high
@@ -115,7 +103,7 @@ class RobotController:
         u = np.clip(u, self.u_min, self.u_max)
         return u
 
-    def model_predictive_control(self, state, t, H=20):
+    def model_predictive_control(self, state, t, H=50):
         def plot_mpc(q_ref, q_opt, u_opt, H):
             assert q_ref.shape == (H+1, 3)
             assert q_opt.shape == (H+1, 3)
@@ -158,9 +146,8 @@ class RobotController:
             assert z.shape == (11, 1)
             assert u.shape == (3, 1)
 
-            q_bar = convert_state(z)
-            tensor = casadi.vertcat(q_bar, u)
-            layers = self.model.get_weights()
+            tensor = casadi.vertcat(z, u)
+            layers = self.agent.model.get_weights()
             L = len(layers)
 
             for i in range(0, L, 2):
@@ -195,6 +182,8 @@ class RobotController:
         N = int(t/self.dt)
 
         if N % H == 0 or self.u is None:
+            print("[{}] running optimizer (t = {}s)".format(FILE, int(t)))
+
             # create reference trajectory
             index = np.linalg.norm(self.trajectory[:, :2] - state[:2], axis=1).argmin()
             start = index
@@ -207,7 +196,7 @@ class RobotController:
 
             z_init = state
             u_init = np.zeros((3, H))
-            u_init[1, :] = 1.0
+            u_init[1, :] = 0.5
 
             opti = casadi.Opti()
 
@@ -230,17 +219,17 @@ class RobotController:
             z_opt = sol.value(z)
             u_opt = sol.value(u)
 
-            #plot_mpc(q_ref.T, z_opt[:3].T, u_opt.T, H)
-
             self.z = z_opt.T
             self.u = u_opt.T
+
+            #plot_mpc(q_ref.T, self.z[:3], self.u, H)
 
         return self.u[N % H]
 
     def step(self, state, t):
         #self.action = self.random_control()
-        #self.action = self.proportional_control(state)
-        self.action = self.model_predictive_control(state, t)
+        self.action = self.proportional_control(state)
+        #self.action = self.model_predictive_control(state, t)
 
         return self.action, self.done
 

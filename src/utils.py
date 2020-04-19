@@ -67,7 +67,6 @@ def adj(g):
     p = g[:2, 2]
     adj_g = np.eye(3)
     adj_g[:2,:2] = R
-    #adj_g[:2, 2] = [p[1], -p[0]]
     return adj_g
 
 # transforms a point

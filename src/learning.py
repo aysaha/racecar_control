@@ -9,18 +9,74 @@ import numpy as np
 import matplotlib.pyplot as plt
 from keras import models, layers
 
-from controllers import convert_state
-
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
+
+class Agent():
+    def __init__(self, path, reset=False, capacity=10000):
+        print("[{}] initializing agent".format(FILE))
+
+        if reset or not os.path.exists(path):
+            self.model = build_model(3, 3)
+        else:
+            self.model = load_model(path)
+
+        self.buffer = {'z': [], 'u': [], 'F': []}
+        self.path = path
+        self.capacity = capacity
+
+    def __del__(self):
+        save_model(self.path, self.model)
+
+    def save(self, sample):
+        z, u, F = sample
+
+        self.buffer['z'].append(np.array(z))
+        self.buffer['u'].append(np.array(u))
+        self.buffer['F'].append(np.array(F))
+
+        while len(self.buffer['z']) > self.capacity: self.buffer['z'].pop(0)
+        while len(self.buffer['u']) > self.capacity: self.buffer['u'].pop(0)
+        while len(self.buffer['F']) > self.capacity: self.buffer['F'].pop(0)
+        
+    def train(self, dt, dataset=None, split=0.75, batch_size=32, epochs=10, verbose=False):
+        print("[{}] training model ({} samples)".format(FILE, len(self.buffer['z'])))
+
+        if dataset:
+            z, u, F = dataset
+        else:
+            z, u, F = np.array(self.buffer['z']), np.array(self.buffer['u']), np.array(self.buffer['F'])
+        
+        # shuffle data
+        p = np.random.permutation(z.shape[0])
+        z, u, F = z[p], u[p], F[p]
+
+        # format data
+        z = z[:, :6]
+        f = (F[:, 3:6] - z[:, 3:6]) / dt
+
+        if verbose:
+            print("{}".format('_' * 98))
+
+        history = self.model.fit([z, u], f,
+                                 validation_split=split,
+                                 batch_size=batch_size,
+                                 epochs=epochs,
+                                 verbose=verbose)
+        
+        if verbose:
+            print("{}\n".format('_' * 98))
+
+        return history.history
+
+    def predict(self):
+        pass
 
 def dynamics(z, u, dt, model):
     assert z.shape == (11,) or z.shape == (11, 1)
     assert u.shape == (3,) or u.shape == (3, 1)
-
-    q_dot = convert_state(state)
     
-    tensor = np.hstack((q_dot, u))
+    tensor = np.hstack((z, u))
     layers = model.get_weights()
     L = len(layers)
     F = np.zeros((11,))
@@ -33,18 +89,6 @@ def dynamics(z, u, dt, model):
             tensor = np.tanh(layers[i].T @ tensor  + layers[i+1])
         else:
             tensor = layers[i].T @ tensor  + layers[i+1]
-
-
-    f = (F[:, 3:] - z[:, 3:]) / dt
-    q_bar = np.zeros((z.shape[0], z.shape[1]-3))
-
-    for i, state in enumerate(z):
-        x, y, theta, v_x, v_y, omega = state[:6]
-        g = twist_to_transform([x, y, theta])
-        g_inv = inv(g)
-        v = transform_vector(g_inv, [v_x, v_y])
-        q_bar[i] = np.concatenate(([v[0], v[1], omega], state[6:]))
-
 
     f = tensor
     F[3:] = z[3:] + f*dt
@@ -62,7 +106,7 @@ def horizon(z, u, dt, model, H):
     
     return z[1:]
 
-def save_dataset(path, z, u, F, limit=250000):
+def save_dataset(path, z, u, F, limit=100000):
     print("[{}] saving dataset ({})".format(FILE, path))
     z, u, F = np.array(z), np.array(u), np.array(F)
 
@@ -103,12 +147,12 @@ def load_model(path):
 def build_model(n, m):
     print("[{}] building model".format(FILE))
 
-    z = layers.Input(shape=(n,), name='z')
+    z = layers.Input(shape=(2*n,), name='z')
     u = layers.Input(shape=(m,), name='u')
     
     input_layer = layers.Concatenate(name ='input_layer')([z, u])
-    hidden_layer_1 = layers.Dense(32, activation='tanh', name='hidden_layer_1')(input_layer)
-    hidden_layer_2 = layers.Dense(32, activation='tanh', name='hidden_layer_2')(hidden_layer_1)
+    hidden_layer_1 = layers.Dense(16, activation='tanh', name='hidden_layer_1')(input_layer)
+    hidden_layer_2 = layers.Dense(16, activation='tanh', name='hidden_layer_2')(hidden_layer_1)
     output_layer = layers.Dense(n, activation='linear', name='output_layer')(hidden_layer_2)
 
     f = layers.Reshape((n,), name='f')(output_layer)
@@ -119,16 +163,17 @@ def build_model(n, m):
     return model
 
 def train_model(model, z, u, F, dt, batch_size=32, epochs=10, verbose=False):
-    print("[{}] training model".format(FILE))
+    print("[{}] training model ({} samples)".format(FILE, z.shape[0]))
 
     if verbose:
         print("{}".format('_' * 98))
         model.summary()
 
     # format training data
-    z = np.apply_along_axis(convert_state, 1, z)
-    F = np.apply_along_axis(convert_state, 1, F)
-    f = (F - z) / dt
+    # z = [q_n q_dot_n q_bar_n]
+    # F = [q_n+1 q_dot_n+1 q_bar_n+1]
+    z = z[:, :6]
+    f = (F[:, 3:6] - z[:, 3:6]) / dt
 
     # record training progress
     start = time.time()
@@ -172,20 +217,16 @@ def main(args):
     dt = gym.make('CarRacing-v1').env.dt
 
     # load dataset
-    z, u, F = load_dataset(args.dataset)
-    n, m = z.shape[1]-3, u.shape[1]
+    dataset = load_dataset(args.dataset)
 
-    # build model
-    model = build_model(n, m)
+    # create agent
+    agent = Agent(args.model, reset=True)
 
     # train model
-    results = train_model(model, z, u, F, dt, epochs=args.epochs, verbose=True)
+    results = agent.train(dt, dataset=dataset, split=0, epochs=args.epochs, verbose=True)
 
     # plot training results
     plot_training(results)
-
-    # save model
-    save_model(args.model, model)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
