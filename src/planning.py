@@ -14,7 +14,7 @@ def plan_trajectory(env, T=15):
     N = int(T/env.dt)
     trajectory = np.zeros((N, 6))
 
-    # position targets
+    # target positions
     for i in range(N):
         j = int(i * M/N)
         alpha = (i * M/N) - j
@@ -22,9 +22,9 @@ def plan_trajectory(env, T=15):
         theta = (theta + np.pi/2) % (2*np.pi)
         trajectory[i, :3] = [x, y, theta]
 
-    # velocity waypoints
+    # target velocities
     for i in range(N):
-        v_x, v_y, omega = trajectory[(i+1) % N, :3] - trajectory[i, :3]
+        v_x, v_y, omega = (trajectory[(i+1) % N, :3] - trajectory[i, :3]) / env.dt
         trajectory[i, 3:] = [v_x, v_y, omega]
 
     return trajectory

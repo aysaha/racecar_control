@@ -8,7 +8,6 @@ from pyglet.window import key
 import inputs
 import casadi
 
-from learning import save_model, load_model, build_model, train_model
 from utils import *
 
 FILE = os.path.basename(__file__)
@@ -40,6 +39,7 @@ class RobotController:
         self.u_max = env.action_space.high
         self.z = None
         self.u = None
+        self.random = False
 
         env.viewer.window.on_key_press = self.on_key_press
 
@@ -51,7 +51,7 @@ class RobotController:
         u = (self.u_max - self.u_min) * np.random.rand(3) + self.u_min
         return u
 
-    def proportional_control(self, state, noise=0.0):
+    def proportional_control(self, state):
         # controller gains
         STEER_GAIN = 0.35
         ACCEL_GAIN = 0.05
@@ -79,7 +79,7 @@ class RobotController:
         v = np.linalg.norm([v_x, v_y])
 
         # desired linear velocity
-        v_d = np.linalg.norm(self.trajectory[end, :2] - self.trajectory[start, :2]) / self.dt / H
+        v_d = np.linalg.norm([self.trajectory[start, 3:5]])
         v_d *= abs(np.cos(psi))
 
         # control is proportional to the error
@@ -94,10 +94,6 @@ class RobotController:
 
         # limit brakes to prevent locking wheels
         u = np.array([steer, accel, min(brake, 0.85)])
-
-        # add noise to control input
-        sigma = np.std([self.u_max, self.u_min], axis=0) * np.random.rand() * noise
-        u += sigma * np.random.randn(3)
 
         # saturate control
         u = np.clip(u, self.u_min, self.u_max)
@@ -122,7 +118,7 @@ class RobotController:
             plt.grid()
 
             # position
-            plt.subplot(2, 2, 3)  
+            plt.subplot(2, 2, 3)
             plt.plot(q_ref[:, 0], q_ref[:, 1], '-o', markersize=4, label='ref')
             plt.plot(q_opt[:, 0], q_opt[:, 1], '--o', markersize=4, label='opt')
             plt.xlabel('x')
@@ -227,48 +223,42 @@ class RobotController:
         return self.u[N % H]
 
     def step(self, state, t):
-        #self.action = self.random_control()
-        self.action = self.proportional_control(state)
+        if int(t/self.dt) % int(1/self.dt) == 0:
+            self.random = np.random.rand() < 0.5
+            self.action = self.random_control()
+
+        if not self.random:
+          self.action = self.proportional_control(state)
+
         #self.action = self.model_predictive_control(state, t)
 
         return self.action, self.done
 
 class KeyboardController:
+    LEFT = -1.0
+    RIGHT = 1.0
+    ACCELERATE = 1.0
+    BRAKE = 0.8
+
     def __init__(self, env):
-        self.action = [0.0, 0.0, 0.0]
+        self.action = np.array([0.0, 0.0, 0.0])
         self.done = False
 
         env.viewer.window.on_key_press = self.on_key_press
         env.viewer.window.on_key_release = self.on_key_release
 
     def on_key_press(self, k, mod):
-        if k == key.LEFT:
-            self.action[0] = -1.0
-
-        if k == key.RIGHT:
-            self.action[0] = +1.0
-
-        if k == key.UP:
-            self.action[1] = +1.0
-
-        if k == key.DOWN:
-            self.action[2] = +0.8
-
-        if k == key.Q:
-            self.done = True
+        if k == key.LEFT: self.action[0] = KeyboardController.LEFT
+        if k == key.RIGHT: self.action[0] = KeyboardController.RIGHT
+        if k == key.UP: self.action[1] = KeyboardController.ACCELERATE
+        if k == key.DOWN: self.action[2] = KeyboardController.BRAKE
+        if k == key.Q: self.done = True
 
     def on_key_release(self, k, mod):
-        if k == key.LEFT  and self.action[0] == -1.0:
-            self.action[0] = 0.0
-
-        if k == key.RIGHT and self.action[0] == +1.0:
-            self.action[0] = 0.0
-
-        if k == key.UP:
-            self.action[1] = 0.0
-
-        if k == key.DOWN:
-            self.action[2] = 0.0
+        if k == key.LEFT and self.action[0] == KeyboardController.LEFT: self.action[0] = 0.0
+        if k == key.RIGHT and self.action[0] == KeyboardController.RIGHT: self.action[0] = 0.0
+        if k == key.UP: self.action[1] = 0.0
+        if k == key.DOWN: self.action[2] = 0.0
 
     def step(self, state, t):
         return self.action, self.done
