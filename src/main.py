@@ -7,7 +7,7 @@ import gym
 import numpy as np
 import matplotlib.pyplot as plt
 
-from learning import Agent, save_dataset
+from learning import Agent, save_dataset, horizon
 from planning import plan_trajectory
 from controllers import initialize_controller
 
@@ -39,9 +39,9 @@ def plot_simulation(car,  env, model=None, data=None, H=1):
     if model is not None and data:
         title += ' (H = {})'.format(H)
         states, actions = map(np.array, data)
+        z, u = states[:, :6], actions
         init, pred = [], []
 
-        '''
         # run model over prediction horizon
         for i in range(states.shape[0]//H):
             if H > 1:
@@ -54,14 +54,6 @@ def plot_simulation(car,  env, model=None, data=None, H=1):
         if H > 1:
             init = np.array(init)
             plt.plot(init[:, 0], init[:, 1], 'o', markersize=4, color=MODEL_COLOR)
-        '''
-
-        z = states[:, :6]
-        u = actions
-        f = model.predict([z, u])
-        q_dot = states[:, 3:6] + f*env.dt
-        q = states[:, :3] + q_dot*env.dt
-        pred = q
 
         # plot predicted values
         pred = np.array(pred)
@@ -120,13 +112,12 @@ def main(args):
             states.append(np.array(state))
             actions.append(np.array(action))
             observations.append(np.array(observation))
-            agent.save((state, action, observation))
 
             if args.control == 'robot' and int(env.t/env.dt) % int(T/env.dt) == 0:
-                agent.train(env.t)
+                agent.train((states, actions, observations))
 
             # update current state
-            state = observation
+            state = np.array(observation)
         except KeyboardInterrupt:
             break
     print("[{}] stopping simulation (t = {}s)".format(FILE, int(env.t)))
@@ -134,12 +125,12 @@ def main(args):
     # close environment
     print("[{}] closing environment".format(FILE))
     env.close()
-
+    
     # plot simulation results
     if args.control == 'robot':
         plot_simulation(observations, env)
     else:
-        plot_simulation(observations, env, model=agent.model, data=(states, actions), H=1)
+        plot_simulation(observations, env, model=agent.model, data=(states, actions), H=25)
 
     # save dataset
     if args.control == 'xbox':
@@ -147,7 +138,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('-d', '--dataset', metavar='dataset', default='datasets/bootstrap.npz')
+    parser.add_argument('-d', '--dataset', metavar='dataset', default='datasets/dynamics.npz')
     parser.add_argument('-m', '--model', metavar='model', default='models/dynamics.h5')
     parser.add_argument('-c', '--control', metavar='control', default='robot')
     args = parser.parse_args()

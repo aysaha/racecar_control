@@ -71,7 +71,7 @@ class RobotController:
 
         # get waypoint in body frame
         g = twist_to_transform([x, y, theta])
-        g_inv = inv(g)
+        g_inv = inverse_transform(g)
         point = transform_point(g_inv, waypoint)
         r, psi = polar(point)
 

@@ -12,17 +12,16 @@ from keras import models, layers
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
-'''
 def dynamics(z, u, dt, model):
-    assert z.shape == (11,) or z.shape == (11, 1)
+    assert z.shape == (6,) or z.shape == (6, 1)
     assert u.shape == (3,) or u.shape == (3, 1)
     
     tensor = np.hstack((z, u))
     layers = model.get_weights()
     L = len(layers)
-    F = np.zeros((11,))
+    F = np.zeros((6,))
 
-    F[:3] = z[:3] + z[3:6]*dt
+    F[:3] = z[:3] + z[3:]*dt
     F[2] = F[2] % (2*np.pi)
 
     for i in range(0, L, 2):
@@ -37,7 +36,7 @@ def dynamics(z, u, dt, model):
     return F
 
 def horizon(z, u, dt, model, H):
-    assert z.shape == (11,) or z.shape == (11, 1)
+    assert z.shape == (6,) or z.shape == (6, 1)
     assert u.shape == (H, 3)
 
     z = np.vstack((z, np.zeros((H, z.shape[0]))))
@@ -46,7 +45,6 @@ def horizon(z, u, dt, model, H):
         z[i+1] = dynamics(z[i], u[i], dt, model)
     
     return z[1:]
-'''
 
 class Agent():
     def __init__(self, path, env, reset=False, capacity=10000):
@@ -59,7 +57,6 @@ class Agent():
         else:
             self.model = load_model(path)
 
-        self.buffer = {'states': [], 'actions': [], 'observations': []}
         self.dt = env.dt
         self.path = path
         self.capacity = capacity
@@ -68,31 +65,18 @@ class Agent():
     def __del__(self):
         print("[{}] deinitializing agent".format(FILE))
         save_model(self.path, self.model)
-
-    def save(self, sample):
-        state, action, observation = map(np.array, sample)
-
-        # save sample in replay buffer
-        self.buffer['states'].append(state)
-        self.buffer['actions'].append(action)
-        self.buffer['observations'].append(observation)
-
-        # enforce a fixed buffer size
-        while len(self.buffer['states']) > self.capacity: self.buffer['states'].pop(0)
-        while len(self.buffer['actions']) > self.capacity: self.buffer['actions'].pop(0)
-        while len(self.buffer['observations']) > self.capacity: self.buffer['observations'].pop(0)
         
-    def train(self, t):
-        print("[{}] training model (t = {}s)".format(FILE, int(t)))
+    def train(self, samples):
+        states, actions, observations = map(np.array, samples)
 
-        # convert replay buffer to dataset
-        states = np.array(self.buffer['states'])
-        actions = np.array(self.buffer['actions'])
-        observations = np.array(self.buffer['observations'])
-        dataset = (states, actions, observations)
+        # format dataset
+        states = states[-self.capacity:]
+        actions = actions[-self.capacity:]
+        observations = observations[-self.capacity:]
+        dataset = (states[::-1], actions[::-1], observations[::-1])
 
         # train model
-        self.results = train_model(self.model, dataset, self.dt, verbose=True)
+        self.results = train_model(self.model, dataset, self.dt)
 
     def predict(self):
         pass
@@ -116,7 +100,7 @@ def load_dataset(path, shuffle=False):
     states, actions, observations = contents['states'], contents['actions'], contents['observations']
 
     if shuffle is True:
-        p = np.random.permutation(z.shape[0])
+        p = np.random.permutation(states.shape[0])
         states, actions, observations = states[p], actions[p], observations[p]
 
     print("[{}] dataset loaded ({} samples)".format(FILE, states.shape[0]))
@@ -145,7 +129,7 @@ def build_model(n, m):
     f = layers.Reshape((n//2,), name='f')(output_layer)
 
     model = models.Model(inputs=[z, u], outputs=f, name='dynamics')
-    model.compile(loss='mse', optimizer='rmsprop', metrics=['acc'])
+    model.compile(loss='mse', optimizer='rmsprop')
 
     return model
 
@@ -155,10 +139,6 @@ def train_model(model, dataset, dt, split=0.75, batch_size=32, epochs=10, verbos
     if verbose:
         print("{}".format('_' * 98))
         model.summary()
-
-    # shuffle data
-    p = np.random.permutation(states.shape[0])
-    states, actions, observations = states[p], actions[p], observations[p]
 
     # format data
     z = states[:, :6]
@@ -175,8 +155,8 @@ def train_model(model, dataset, dt, split=0.75, batch_size=32, epochs=10, verbos
 
     if verbose:
         print("{}\n".format('_' * 98))
-        print("[{}] model trained ({}m {}s)".format(FILE, int(minutes), int(seconds)))
-        
+    
+    print("[{}] trained model ({}m {}s)".format(FILE, int(minutes), int(seconds)))
     return history.history
 
 def plot_training(results):
@@ -185,23 +165,14 @@ def plot_training(results):
     epochs = np.arange(len(results['loss']))
 
     # plot training loss
-    plt.subplot(2, 1, 1)
-    plt.plot(epochs, results['val_loss'], '-', label='Validation')
-    plt.plot(epochs, results['loss'], '--', label='Training')   
+    plt.plot(epochs, results['loss'], '-', label='Training') 
+    plt.plot(epochs, results['val_loss'], '--', label='Validation')
     plt.title('Training Results')
+    plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
     plt.grid()
-
-    # plot training accuracy
-    plt.subplot(2, 1, 2)  
-    plt.plot(epochs, results['val_acc'], '-', label='Validation')
-    plt.plot(epochs, results['acc'], '--', label='Training')
-    plt.xlabel('Epoch')
-    plt.ylabel('Accuracy')
-    plt.legend()
-    plt.grid()
-
+    
     plt.show()
 
 def main(args):
@@ -213,7 +184,7 @@ def main(args):
     env = gym.make('CarRacing-v1').env
 
     # load dataset
-    dataset = load_dataset(args.dataset)
+    dataset = load_dataset(args.dataset, shuffle=True)
 
     # create agent
     agent = Agent(args.model, env, reset=True)
@@ -226,7 +197,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('-d', '--dataset', metavar='dataset', default='datasets/bootstrap.npz')
+    parser.add_argument('-d', '--dataset', metavar='dataset', default='datasets/dynamics.npz')
     parser.add_argument('-m', '--model', metavar='model', default='models/dynamics.h5')
     parser.add_argument('-e', '--epochs', metavar='epochs', default=100, type=int)
     args = parser.parse_args()
