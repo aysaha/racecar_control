@@ -6,18 +6,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pyglet.window import key
 import inputs
-import casadi
+from casadi import *
 
+from planning import plan_trajectory
 from utils import *
 
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
-def initialize_controller(control, trajectory, env):
+def initialize_controller(control, model, env):
     print("[{}] initializing controller ({})".format(FILE, control))
 
     if control == 'robot':
-        controller = RobotController(trajectory, env)
+        controller = RobotController(model, env)
     elif control == 'keyboard':
         controller = KeyboardController(env)
     elif control == 'xbox':
@@ -28,10 +29,11 @@ def initialize_controller(control, trajectory, env):
     return controller
 
 class RobotController:
-    def __init__(self, trajectory, env):
+    def __init__(self, model, env):
         self.action = np.array([0.0, 0.0, 0.0])
         self.done = False
-        self.trajectory = trajectory
+        self.model = model
+        self.trajectory = plan_trajectory(env)
         self.dt = env.dt
         self.z_min = env.observation_space.low
         self.z_max = env.observation_space.high
@@ -99,11 +101,11 @@ class RobotController:
         u = np.clip(u, self.u_min, self.u_max)
         return u
 
-    def model_predictive_control(self, state, t, H=50):
-        def plot_mpc(q_ref, q_opt, u_opt, H):
-            assert q_ref.shape == (H+1, 3)
-            assert q_opt.shape == (H+1, 3)
+    def model_predictive_control(self, state, t, H=5):
+        def plot_mpc(z_opt, u_opt, z_ref, H):
+            assert z_opt.shape == (H+1, 6)
             assert u_opt.shape == (H, 3)
+            assert z_ref.shape == (H+1, 6)
             plt.figure(num='mpc')
 
             # control
@@ -119,8 +121,8 @@ class RobotController:
 
             # position
             plt.subplot(2, 2, 3)
-            plt.plot(q_ref[:, 0], q_ref[:, 1], '-o', markersize=4, label='ref')
-            plt.plot(q_opt[:, 0], q_opt[:, 1], '--o', markersize=4, label='opt')
+            plt.plot(z_ref[:, 0], z_ref[:, 1], '-o', markersize=4, label='ref')
+            plt.plot(z_opt[:, 0], z_opt[:, 1], '--o', markersize=4, label='opt')
             plt.xlabel('x')
             plt.ylabel('y')
             plt.legend()
@@ -128,8 +130,8 @@ class RobotController:
 
             # orientation
             plt.subplot(2, 2, 4)
-            plt.plot(np.arange(H+1), q_ref[:, 2], '-o', markersize=4, label='ref')
-            plt.plot(np.arange(H+1), q_opt[:, 2], '--o', markersize=4, label='opt')
+            plt.plot(np.arange(H+1), z_ref[:, 2], '-o', markersize=4, label='ref')
+            plt.plot(np.arange(H+1), z_opt[:, 2], '--o', markersize=4, label='opt')
             plt.xlabel('step')
             plt.ylabel('theta')
             plt.ylim(0, 2*np.pi)
@@ -139,39 +141,34 @@ class RobotController:
             plt.show()
 
         def dynamics(z, u):
-            assert z.shape == (11, 1)
-            assert u.shape == (3, 1)
-
-            tensor = casadi.vertcat(z, u)
-            layers = self.agent.model.get_weights()
+            tensor = vertcat(z, u)
+            layers = self.model.get_weights()
             L = len(layers)
 
             for i in range(0, L, 2):
+                weight, bias = MX(layers[i].T), MX(layers[i+1])
+
                 if i < L-2:
-                    tensor = casadi.tanh(layers[i].T @ tensor  + layers[i+1])
+                    tensor = tanh(weight @ tensor + bias)
                 else:
-                    tensor = layers[i].T @ tensor  + layers[i+1]
+                    tensor = weight @ tensor + bias
 
             return tensor
 
-        def J(z, u, q_ref, H):
-            assert z.shape == (11, H+1)
-            assert u.shape == (3, H)
-            assert q_ref.shape == (3, H+1)
-
-            Q = np.diag([10, 10, 1])
-            R = np.diag([1, 1, 1])
+        def J(z, u, z_ref, H):
+            Q = MX.eye(6)
+            R = MX.eye(3)
             cost = 0
 
             for k in range(H):
-                cost += (z[:3, k] - q_ref[:, k]).T @ Q @ (z[:3, k] - q_ref[:, k]) + u[:, k].T @ R @ u[:, k]
+                cost += (z[:, k] - z_ref[:, k]).T @ Q @ (z[:, k] - z_ref[:, k]) + u[:, k].T @ R @ u[:, k]
 
                 f = dynamics(z[:, k], u[:, k])
-                z[:3, k+1] = z[:3, k] + z[3:6, k]*self.dt
-                z[2, k+1] = casadi.fmod(z[2, k+1], 2*np.pi)
+                z[:3, k+1] = z[:3, k] + z[3:, k]*self.dt
+                z[2, k+1] = fmod(z[2, k+1], 2*np.pi)
                 z[3:, k+1] = z[3:, k] + f*self.dt
 
-            cost += (z[:3, H] - q_ref[:, H]).T @ Q @ (z[:3, H] - q_ref[:, H])
+            cost += (z[:, H] - z_ref[:, H]).T @ Q @ (z[:, H] - z_ref[:, H])
 
             return cost
 
@@ -181,56 +178,68 @@ class RobotController:
             print("[{}] running optimizer (t = {}s)".format(FILE, int(t)))
 
             # create reference trajectory
-            index = np.linalg.norm(self.trajectory[:, :2] - state[:2], axis=1).argmin()
-            start = index
+            start = np.linalg.norm(self.trajectory[:, :2] - state[:2], axis=1).argmin()
             end = (start + (H+1)) % self.trajectory.shape[0]
 
             if start > end:
-                q_ref = np.vstack((self.trajectory[start:], self.trajectory[:end])).T
+                trajectory = np.vstack((self.trajectory[start:], self.trajectory[:end])).T
             else:
-                q_ref = self.trajectory[start:end].T
+                trajectory = self.trajectory[start:end].T
 
-            z_init = state
-            u_init = np.zeros((3, H))
-            u_init[1, :] = 0.5
+            # CasADi Opti Stack
+            opti = Opti()
 
-            opti = casadi.Opti()
+            # constants
+            z_ref = trajectory
+            z_init = state[:6]
+            u_init = np.tile([0.0, 0.5, 0.0], (H, 1)).T
 
-            z = opti.variable(11, H+1)
-            opti.set_initial(z[:3, :], q_ref)
+            # optimization variable
+            z = opti.variable(6, H+1)
+            opti.set_initial(z, z_ref)
 
+            # optimization variable
             u = opti.variable(3, H)
             opti.set_initial(u, u_init)
-            
-            opti.minimize(J(z, u, q_ref, H))
-            opti.subject_to(z[:, 0] == z_init)
 
-            low = np.tile(self.u_min, H)
-            high = np.tile(self.u_max, H)
-            bounds = opti.bounded(low, casadi.vec(u), high)
+            # cost function
+            opti.minimize(J(z, u, z_ref, H))
+
+            # constraints
+            opti.subject_to(z[:, 0] == z_init)
+    
+            # bounds
+            bounds = opti.bounded(np.tile(self.u_min, H), casadi.vec(u), np.tile(self.u_max, H))
             opti.subject_to(bounds)
             
+            #print("{}".format('_' * 98))
+
+            # optimizer
             opti.solver('ipopt', {'print_time': False}, {'print_level': 0})
             sol = opti.solve()
+
+            #print("{}".format('_' * 98))
+
+            # solution
             z_opt = sol.value(z)
             u_opt = sol.value(u)
+
+            #plot_mpc(z_opt.T, u_opt.T, z_ref.T, H)
 
             self.z = z_opt.T
             self.u = u_opt.T
 
-            #plot_mpc(q_ref.T, self.z[:3], self.u, H)
-
         return self.u[N % H]
 
     def step(self, state, t):
-        if int(t/self.dt) % int(1/self.dt) == 0:
-            self.random = np.random.rand() < 0.5
-            self.action = self.random_control()
+        #if int(t/self.dt) % int(1/self.dt) == 0:
+        #    self.random = np.random.rand() < 0.5
+        #    self.action = self.random_control()
 
-        if not self.random:
-          self.action = self.proportional_control(state)
+        #if not self.random:
+        #    self.action = self.proportional_control(state)
 
-        #self.action = self.model_predictive_control(state, t)
+        self.action = self.model_predictive_control(state, t)
 
         return self.action, self.done
 

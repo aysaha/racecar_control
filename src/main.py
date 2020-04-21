@@ -7,8 +7,7 @@ import gym
 import numpy as np
 import matplotlib.pyplot as plt
 
-from learning import Agent, save_dataset, horizon
-from planning import plan_trajectory
+from learning import Agent, save_dataset
 from controllers import initialize_controller
 
 FILE = os.path.basename(__file__)
@@ -20,7 +19,7 @@ MODEL_COLOR = '#0066CC'
 MAJOR_GRID_COLOR = '#CCCCCC'
 MINOR_GRID_COLOR = '#DDDDDD'
 
-def plot_simulation(car,  env, model=None, data=None, H=1):
+def plot_simulation(car,  env, agent=None, data=None, H=1):
     print("[{}] plotting simulation".format(FILE))
     plt.figure(num='simulation')
 
@@ -36,7 +35,7 @@ def plot_simulation(car,  env, model=None, data=None, H=1):
     plt.plot(car[:, 0], car[:, 1], '-', linewidth=2, color=CAR_COLOR, label="Car")
 
     # plot model
-    if model is not None and data:
+    if agent is not None and data:
         title += ' (H = {})'.format(H)
         states, actions = map(np.array, data)
         z, u = states[:, :6], actions
@@ -48,7 +47,7 @@ def plot_simulation(car,  env, model=None, data=None, H=1):
                 init.append(z[H*i])
                 pred.append(z[H*i])
             
-            pred.extend(list(horizon(z[H*i], u[H*i:H*(i+1)], env.dt, model, H)))
+            pred.extend(list(agent.horizon(z[H*i], u[H*i:H*(i+1)], H)))
 
         # plot initial values
         if H > 1:
@@ -86,14 +85,11 @@ def main(args):
     done = False
     T = 150
 
-    # plan trajectory
-    trajectory = plan_trajectory(env)
-
-    # initialize controller
-    controller = initialize_controller(args.control, trajectory, env)
-
     # initialize agent
     agent = Agent(args.model, env)
+
+    # initialize controller
+    controller = initialize_controller(args.control, agent.model, env)
 
     # run simulation
     print("[{}] running simulation (t = {}s)".format(FILE, int(env.t)))
@@ -130,7 +126,7 @@ def main(args):
     if args.control == 'robot':
         plot_simulation(observations, env)
     else:
-        plot_simulation(observations, env, model=agent.model, data=(states, actions), H=25)
+        plot_simulation(observations, env, agent=agent, data=(states, actions), H=25)
 
     # save dataset
     if args.control == 'xbox':

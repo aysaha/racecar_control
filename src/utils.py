@@ -8,8 +8,8 @@ def hat(xi):
     xi_hat[:2, 2] = xi[:2]
     return xi_hat
 
-# planar unhat operator
-def unhat(xi_hat):
+# planar vee operator
+def vee(xi_hat):
     assert np.shape(xi_hat) == (3, 3)
     xi_hat = np.array(xi_hat)
     xi = np.zeros((3,))
