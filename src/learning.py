@@ -12,6 +12,8 @@ from keras import models, layers
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
+LINE_WIDTH = 98
+
 class Agent():
     def __init__(self, path, env, capacity=10000):
         print("[{}] initializing agent".format(FILE))
@@ -23,10 +25,6 @@ class Agent():
         else:
             self.model = load_model(path)
 
-        print("{}".format('_' * 98))
-        self.model.summary()
-        print("")
-
         self.dt = env.dt
         self.path = path
         self.capacity = capacity
@@ -35,54 +33,36 @@ class Agent():
         print("[{}] deinitializing agent".format(FILE))
         save_model(self.path, self.model)
         
-    def train(self, samples):
-        states, actions, observations = map(np.array, samples)
+    def train(self, samples, t):
+        if int(t/self.dt) % (self.capacity//20) == 0:
+            states, actions, observations = map(np.array, samples)
 
-        # only use most recent samples
-        states = states[-self.capacity:]
-        actions = actions[-self.capacity:]
-        observations = observations[-self.capacity:]
+            # only use recent samples
+            states = states[-self.capacity:]
+            actions = actions[-self.capacity:]
+            observations = observations[-self.capacity:]
 
-        # reverse order to train on new samples and validate on old samples
-        states, actions, observations = states[::-1], actions[::-1], observations[::-1]
+            # format dataset
+            dataset = format_dataset((states[::-1], actions[::-1], observations[::-1]), self.dt)
 
-        # format dataset
-        dataset = format_dataset((states, actions, observations), self.dt)
+            # train model
+            results = train_model(self.model, dataset, split=0.75)
 
-        # train model
-        results = train_model(self.model, dataset, split=0.75, epochs=10)
-
-    def predict(self, z, u):
-        assert z.shape == (6,) or z.shape == (6, 1)
-        assert u.shape == (3,) or u.shape == (3, 1)
-        
-        tensor = np.hstack((z, u))
-        layers = self.model.get_weights()
-        L = len(layers)
+    def dynamics(self, z, u):
+        f = self.model.predict([z.reshape(1, -1), u.reshape(1, -1)])[0]
         F = np.zeros((6,))
 
         F[:3] = z[:3] + z[3:]*self.dt
         F[2] = F[2] % (2*np.pi)
-
-        for i in range(0, L, 2):
-            if i < L-2:
-                tensor = np.tanh(layers[i].T @ tensor  + layers[i+1])
-            else:
-                tensor = layers[i].T @ tensor  + layers[i+1]
-
-        f = tensor
         F[3:] = z[3:] + f*self.dt
 
         return F
 
     def horizon(self, z, u, H):
-        assert z.shape == (6,) or z.shape == (6, 1)
-        assert u.shape == (H, 3)
-
         z = np.vstack((z, np.zeros((H, z.shape[0]))))
 
         for i in range(H):
-            z[i+1] = self.predict(z[i], u[i])
+            z[i+1] = self.dynamics(z[i], u[i])
         
         return z[1:]
 
@@ -125,6 +105,11 @@ def save_model(path, model):
 def load_model(path):
     print("[{}] loading model ({})".format(FILE, path))
     model = models.load_model(path)
+    
+    print("{}".format('_' * LINE_WIDTH))
+    model.summary()
+    print("")
+
     return model
 
 def build_model(n, m):
@@ -143,13 +128,17 @@ def build_model(n, m):
     model = models.Model(inputs=[z, u], outputs=f, name='dynamics')
     model.compile(loss='mean_squared_error', optimizer='rmsprop')
 
+    print("{}".format('_' * LINE_WIDTH))
+    model.summary()
+    print("")
+
     return model
 
-def train_model(model, dataset, split=0.25, batch_size=32, epochs=100, verbose=True):
+def train_model(model, dataset, split=0.25, batch_size=32, epochs=10, verbose=True):
     z, u, f = map(np.array, dataset)
 
     if verbose:
-        print("{}".format('_' * 98))
+        print("{}".format('_' * LINE_WIDTH))
 
     # record training progress
     start = time.time()
@@ -160,7 +149,7 @@ def train_model(model, dataset, split=0.25, batch_size=32, epochs=100, verbose=T
     minutes, seconds = divmod(end-start, 60)
 
     if verbose:
-        print("{}\n".format('_' * 98))
+        print("{}\n".format('_' * LINE_WIDTH))
     
     print("[{}] model trained ({}m {}s)".format(FILE, int(minutes), int(seconds)))
     return history.history
@@ -168,12 +157,12 @@ def train_model(model, dataset, split=0.25, batch_size=32, epochs=100, verbose=T
 def plot_training(results):
     print("[{}] plotting training results".format(FILE))
     plt.figure(num='training')
-    epochs = np.arange(len(results['loss']))
+    epochs = range(len(results['loss']))
 
     # plot training loss
     plt.plot(epochs, results['loss'], '-', label='Training') 
     plt.plot(epochs, results['val_loss'], '--', label='Validation')
-    plt.title('Training Results')
+    plt.title('Training')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
     plt.legend()
@@ -184,24 +173,6 @@ def plot_training(results):
 def main(args):
     assert os.path.exists(args.dataset) and os.path.splitext(args.dataset)[1] == '.npz'
     assert os.path.splitext(args.model)[1] == '.h5'
-
-    '''
-    import tensorflow as tf
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    if gpus:
-        try:
-            # Restrict TensorFlow to only use the fourth GPU
-            tf.config.experimental.set_visible_devices(gpus[0], 'GPU')
-
-            # Currently, memory growth needs to be the same across GPUs
-            for gpu in gpus:
-                tf.config.experimental.set_memory_growth(gpu, True)
-            logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
-        except RuntimeError as e:
-            # Memory growth must be set before GPUs have been initialized
-            print(e)
-    '''
 
     # get discretization time
     gym.logger.set_level(gym.logger.ERROR)
@@ -214,7 +185,7 @@ def main(args):
     dataset = format_dataset((states, actions, observations), dt)
 
     # build model
-    model = build_model(6, 3)
+    model = build_model(n=6, m=3)
 
     # train model
     results = train_model(model, dataset, epochs=args.epochs)

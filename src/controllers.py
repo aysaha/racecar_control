@@ -6,8 +6,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pyglet.window import key
 import inputs
-from casadi import *
 
+from optimization import NonlinearOptimizer
 from planning import plan_trajectory
 from utils import *
 
@@ -33,6 +33,7 @@ class RobotController:
         self.action = np.array([0.0, 0.0, 0.0])
         self.done = False
         self.model = model
+        self.optimizer = NonlinearOptimizer(model, env.dt)
         self.trajectory = plan_trajectory(env)
         self.dt = env.dt
         self.z_min = env.observation_space.low
@@ -41,13 +42,19 @@ class RobotController:
         self.u_max = env.action_space.high
         self.z = None
         self.u = None
-        self.random = False
 
         env.viewer.window.on_key_press = self.on_key_press
 
     def on_key_press(self, k, mod):
         if k == key.Q:
             self.done = True
+
+    def step(self, state, t):
+        #self.action = self.random_control()
+        #self.action = self.proportional_control(state)
+        self.action = self.model_predictive_control(state, t)
+
+        return self.action, self.done
 
     def random_control(self):
         u = (self.u_max - self.u_min) * np.random.rand(3) + self.u_min
@@ -101,147 +108,73 @@ class RobotController:
         u = np.clip(u, self.u_min, self.u_max)
         return u
 
-    def model_predictive_control(self, state, t, H=5):
-        def plot_mpc(z_opt, u_opt, z_ref, H):
-            assert z_opt.shape == (H+1, 6)
-            assert u_opt.shape == (H, 3)
-            assert z_ref.shape == (H+1, 6)
-            plt.figure(num='mpc')
-
-            # control
-            plt.subplot(2, 1, 1)
-            plt.title('Model Predictive Control (H = {})'.format(H))
-            plt.plot(np.arange(H), u_opt[:, 0], '-o', color='C4', markersize=4, label='steering')
-            plt.plot(np.arange(H), u_opt[:, 1], '-o', color='C2', markersize=4, label='throttle')
-            plt.plot(np.arange(H), u_opt[:, 2], '-o', color='C3', markersize=4, label='brake')
-            plt.xlabel('step')
-            plt.ylim(-1, 1)
-            plt.legend()
-            plt.grid()
-
-            # position
-            plt.subplot(2, 2, 3)
-            plt.plot(z_ref[:, 0], z_ref[:, 1], '-o', markersize=4, label='ref')
-            plt.plot(z_opt[:, 0], z_opt[:, 1], '--o', markersize=4, label='opt')
-            plt.xlabel('x')
-            plt.ylabel('y')
-            plt.legend()
-            plt.grid()
-
-            # orientation
-            plt.subplot(2, 2, 4)
-            plt.plot(np.arange(H+1), z_ref[:, 2], '-o', markersize=4, label='ref')
-            plt.plot(np.arange(H+1), z_opt[:, 2], '--o', markersize=4, label='opt')
-            plt.xlabel('step')
-            plt.ylabel('theta')
-            plt.ylim(0, 2*np.pi)
-            plt.legend()
-            plt.grid()
-
-            plt.show()
-
-        def dynamics(z, u):
-            tensor = vertcat(z, u)
-            layers = self.model.get_weights()
-            L = len(layers)
-
-            for i in range(0, L, 2):
-                weight, bias = MX(layers[i].T), MX(layers[i+1])
-
-                if i < L-2:
-                    tensor = tanh(weight @ tensor + bias)
-                else:
-                    tensor = weight @ tensor + bias
-
-            return tensor
-
-        def J(z, u, z_ref, H):
-            Q = MX.eye(6)
-            R = MX.eye(3)
-            cost = 0
-
-            for k in range(H):
-                cost += (z[:, k] - z_ref[:, k]).T @ Q @ (z[:, k] - z_ref[:, k]) + u[:, k].T @ R @ u[:, k]
-
-                f = dynamics(z[:, k], u[:, k])
-                z[:3, k+1] = z[:3, k] + z[3:, k]*self.dt
-                z[2, k+1] = fmod(z[2, k+1], 2*np.pi)
-                z[3:, k+1] = z[3:, k] + f*self.dt
-
-            cost += (z[:, H] - z_ref[:, H]).T @ Q @ (z[:, H] - z_ref[:, H])
-
-            return cost
-
+    def model_predictive_control(self, state, t, H=16):
         N = int(t/self.dt)
 
-        if N % H == 0 or self.u is None:
-            print("[{}] running optimizer (t = {}s)".format(FILE, int(t)))
-
+        if N % (H//4) == 0 or self.u is None:
             # create reference trajectory
             start = np.linalg.norm(self.trajectory[:, :2] - state[:2], axis=1).argmin()
             end = (start + (H+1)) % self.trajectory.shape[0]
 
             if start > end:
-                trajectory = np.vstack((self.trajectory[start:], self.trajectory[:end])).T
+                trajectory = np.vstack((self.trajectory[start:], self.trajectory[:end]))
             else:
-                trajectory = self.trajectory[start:end].T
+                trajectory = self.trajectory[start:end]
 
-            # CasADi Opti Stack
-            opti = Opti()
-
-            # constants
-            z_ref = trajectory
+            # set up variables for optimizer
             z_init = state[:6]
-            u_init = np.tile([0.0, 0.5, 0.0], (H, 1)).T
+            u_init = np.tile([-0.1, 0.2, 0.0], (H, 1)).T
+            z_ref = trajectory.T
+            u_b = (np.tile(self.u_min, H), np.tile(self.u_max, H))
 
-            # optimization variable
-            z = opti.variable(6, H+1)
-            opti.set_initial(z, z_ref)
+            # run optimizer
+            z_opt, u_opt = self.optimizer.run(z_init, u_init, z_ref, u_b, H)
 
-            # optimization variable
-            u = opti.variable(3, H)
-            opti.set_initial(u, u_init)
+            # plot solutions
+            #RobotController.plot_mpc(z_opt.T, u_opt.T, z_ref.T, H)
 
-            # cost function
-            opti.minimize(J(z, u, z_ref, H))
-
-            # constraints
-            opti.subject_to(z[:, 0] == z_init)
-    
-            # bounds
-            bounds = opti.bounded(np.tile(self.u_min, H), casadi.vec(u), np.tile(self.u_max, H))
-            opti.subject_to(bounds)
-            
-            #print("{}".format('_' * 98))
-
-            # optimizer
-            opti.solver('ipopt', {'print_time': False}, {'print_level': 0})
-            sol = opti.solve()
-
-            #print("{}".format('_' * 98))
-
-            # solution
-            z_opt = sol.value(z)
-            u_opt = sol.value(u)
-
-            #plot_mpc(z_opt.T, u_opt.T, z_ref.T, H)
-
+            # save solutions
             self.z = z_opt.T
             self.u = u_opt.T
 
         return self.u[N % H]
 
-    def step(self, state, t):
-        #if int(t/self.dt) % int(1/self.dt) == 0:
-        #    self.random = np.random.rand() < 0.5
-        #    self.action = self.random_control()
+    def plot_mpc(z_opt, u_opt, z_ref, H, delta=0.1):
+        plt.figure(num='mpc', clear=True)
 
-        #if not self.random:
-        #    self.action = self.proportional_control(state)
+        # control
+        plt.subplot(2, 1, 1)
+        plt.title('Model Predictive Control (H = {})'.format(H))
+        plt.plot(range(1, H+1), u_opt[:, 0], '-o', color='C4', markersize=4, label='steering')
+        plt.plot(range(1, H+1), u_opt[:, 1], '-o', color='C2', markersize=4, label='throttle')
+        plt.plot(range(1, H+1), u_opt[:, 2], '-o', color='C3', markersize=4, label='brake')
+        plt.xlabel('step')
+        plt.xlim(1 - delta, H + delta)
+        plt.ylim(-1 - delta, 1 + delta)
+        plt.legend()
+        plt.grid()
 
-        self.action = self.model_predictive_control(state, t)
+        # position
+        plt.subplot(2, 2, 3)
+        plt.plot(z_ref[:, 0], z_ref[:, 1], '-o', markersize=4, label='ref')
+        plt.plot(z_opt[:, 0], z_opt[:, 1], '--o', markersize=4, label='opt')
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.legend()
+        plt.grid()
 
-        return self.action, self.done
+        # orientation
+        plt.subplot(2, 2, 4)
+        plt.plot(np.arange(1, H+2), z_ref[:, 2] * 180/np.pi, '-o', markersize=4, label='ref')
+        plt.plot(np.arange(1, H+2), z_opt[:, 2] * 180/np.pi, '--o', markersize=4, label='opt')
+        plt.xlabel('step')
+        plt.ylabel('theta')
+        plt.xlim(1 - delta, H + delta)
+        plt.ylim(0 - delta, 360 + delta)
+        plt.legend()
+        plt.grid()
+
+        plt.pause(1e-3)
 
 class KeyboardController:
     LEFT = -1.0

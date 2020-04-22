@@ -24,7 +24,7 @@ def plot_simulation(car,  env, agent=None, data=None, H=1):
     plt.figure(num='simulation')
 
     # create plot title
-    title = 'Simulation Results'
+    title = 'Simulation'
 
     # plot track
     track = np.vstack((env.track, env.track[0]))
@@ -83,7 +83,6 @@ def main(args):
     state = env.reset()
     states, actions, observations = [], [], []
     done = False
-    T = 150
 
     # initialize agent
     agent = Agent(args.model, env)
@@ -109,13 +108,13 @@ def main(args):
             actions.append(np.array(action))
             observations.append(np.array(observation))
 
-            if args.control == 'robot' and int(env.t/env.dt) % int(T/env.dt) == 0:
-                agent.train((states, actions, observations))
+            #if args.control == 'robot':
+            #    agent.train((states, actions, observations), env.t)
 
             # update current state
             state = np.array(observation)
         except KeyboardInterrupt:
-            break
+            done = True
     print("[{}] stopping simulation (t = {}s)".format(FILE, int(env.t)))
 
     # close environment
@@ -126,7 +125,7 @@ def main(args):
     if args.control == 'robot':
         plot_simulation(observations, env)
     else:
-        plot_simulation(observations, env, agent=agent, data=(states, actions), H=25)
+        plot_simulation(observations, env, agent=agent, data=(states, actions), H=16)
 
     # save dataset
     if args.control == 'xbox':
