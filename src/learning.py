@@ -15,7 +15,7 @@ DIRECTORY = os.path.dirname(__file__)
 LINE_WIDTH = 98
 
 class Agent():
-    def __init__(self, path, env, capacity=10000):
+    def __init__(self, path, env, capacity=1000):
         print("[{}] initializing agent".format(FILE))
 
         if not os.path.exists(path):
@@ -165,7 +165,7 @@ def plot_training(results):
     plt.title('Training')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
-    plt.legend()
+    plt.legend(loc='upper right')
     plt.grid()
     
     plt.show()

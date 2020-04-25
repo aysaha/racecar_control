@@ -62,7 +62,7 @@ def plot_simulation(car,  env, agent=None, data=None, H=1):
     plt.title(title)
     plt.xlabel('x')
     plt.ylabel('y')
-    plt.legend(borderpad=1.2, handletextpad=1.2)
+    plt.legend(loc='upper right', borderpad=1.2, handletextpad=1.2)
 
     # format grid
     plt.grid(which='major', color=MAJOR_GRID_COLOR)
@@ -125,7 +125,7 @@ def main(args):
     if args.control == 'robot':
         plot_simulation(observations, env)
     else:
-        plot_simulation(observations, env, agent=agent, data=(states, actions), H=16)
+        plot_simulation(observations, env, agent=agent, data=(states, actions), H=10)
 
     # save dataset
     if args.control == 'xbox':
