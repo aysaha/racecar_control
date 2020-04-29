@@ -8,8 +8,8 @@ def hat(xi):
     xi_hat[:2, 2] = xi[:2]
     return xi_hat
 
-# planar unhat operator
-def unhat(xi_hat):
+# planar vee operator
+def vee(xi_hat):
     assert np.shape(xi_hat) == (3, 3)
     xi_hat = np.array(xi_hat)
     xi = np.zeros((3,))
@@ -49,7 +49,7 @@ def transform_to_twist(g):
     return xi
 
 # inverse of a planar rigid body transform
-def inv(g):
+def inverse_transform(g):
     assert np.shape(g) == (3, 3)
     g = np.array(g)
     R = g[:2, :2]
@@ -60,15 +60,15 @@ def inv(g):
     return g_inv
 
 # adjoint of a planar rigid body transform
-def adj(g):
+def adjoint_transform(g):
     assert np.shape(g) == (3, 3)
     g = np.array(g)
     R = g[:2, :2]
     p = g[:2, 2]
-    adj_g = np.eye(3)
-    adj_g[:2,:2] = R
-    #adj_g[:2, 2] = [p[1], -p[0]]
-    return adj_g
+    ad_g = np.eye(3)
+    ad_g[:2, :2] = R
+    ad_g[:2, 2] = [p[1], -p[0]]
+    return ad_g
 
 # transforms a point
 def transform_point(g, p):
