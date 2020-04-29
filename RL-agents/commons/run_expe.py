@@ -3,6 +3,7 @@ import signal
 import time
 import datetime
 import yaml
+import numpy as np
 try:
     from tqdm import trange
 except ModuleNotFoundError:
@@ -12,6 +13,11 @@ import torch
 import gym
 #import gym_hypercube
 import matplotlib.pyplot as plt
+
+import sys
+sys.path.append("../src")
+from planning import plan_trajectory
+from utils import *
 
 from commons.utils import NormalizedActions, get_latest_dir
 
@@ -40,6 +46,33 @@ def create_folder(algo_name, game, config):
     return folder
 
 
+def get_current_waypoint(trajectory, x, y):
+    # waypoint horizon
+    N = trajectory.shape[0]
+    H = N // 100
+
+    # create waypoint
+    start = np.linalg.norm(trajectory[:, :2] - [x, y], axis=1).argmin()
+    end = (start + H) % N
+    waypoint = trajectory[end, :2]
+
+    wp = trajectory[(end + 1) % len(trajectory), :3]
+    wm = trajectory[(end - 1) % len(trajectory), :3]
+    curvature = wp[2] - wm[2]  
+    return list(waypoint) + [curvature]
+
+def waypoint_to_car_ref(waypoint, x, y, theta):
+    g = twist_to_transform([x, y, theta])
+    g_inv = inv(g)
+    point = transform_point(g_inv, waypoint[:2])
+    return point
+
+def speed_to_car_ref(v_x, v_y, theta):
+    v_t = np.cos(theta) * v_x + np.sin(theta) * v_y
+    v_n = - np.sin(theta)*v_x + np.cos(theta) * v_y
+    return (v_t, v_n)
+
+
 def train(Agent, args):
     config = load_config(f'agents/{args.agent}/config.yaml')
 
@@ -58,6 +91,8 @@ def train(Agent, args):
     # Create gym environment and agent
     #env = NormalizedActions(gym.make(**config["GAME"]))
     env = gym.make('CarRacing-v1').env
+    state = env.reset()
+    trajectory = plan_trajectory(env)
 
     model = Agent(device, folder, config)
 
@@ -88,22 +123,43 @@ def train(Agent, args):
             episode_reward = 0
 
             state = env.reset()
+            trajectory = plan_trajectory(env)
 
             while not done and step < config["MAX_STEPS"]:
 
-                action = model.select_action(state, episode=episode)
-
                 #Original code
                 #next_state, reward, done, _ = env.step(action)
-                next_state = env.step(action)
                 done = 0
                 reward = 1
+                
+                #Get waypoint in the referential of the car
+                x, y, theta, v_x, v_y, omega = state[:6]
+                vt,vn = speed_to_car_ref(v_x, v_y, theta)
+                old_waypoint = get_current_waypoint(trajectory, x, y)
 
+                waypoint = waypoint_to_car_ref(old_waypoint[:2], x, y, theta)
+                modelstate = list(waypoint) + [old_waypoint[2], vt, vn, omega] + list(state[6:])
+                old_distance = np.linalg.norm(waypoint)
+                #Selection action with respect to thais
+                action = model.select_action(modelstate, episode=episode)
 
+                #Step through environment
+                next_state = env.step(action)
+
+                #Get the new state and the distance between the old waypoint and the new position of the car
+                x, y, theta, v_x, v_y, omega = next_state[:6]
+                new_waypoint = waypoint_to_car_ref(old_waypoint[:2], x, y, theta) 
+                vt,vn = speed_to_car_ref(v_x, v_y, theta)
+                new_curvature = get_current_waypoint(trajectory, x, y)[2]
+                new_modelstate = list(new_waypoint) + [new_curvature, vt,vn,omega] + list(next_state[6:])
+                new_distance = np.linalg.norm(new_waypoint)
+
+                #Compute the reward as how close to the old waypoint we are
+                reward = - (new_distance/100)**2 - action[0]**2 + np.sqrt(np.abs(vt))/10
                 episode_reward += reward
 
                 # Save transition into memory
-                model.memory.push(state, action, reward, next_state, done)
+                model.memory.push(modelstate, action, reward, new_modelstate, done)
                 state = next_state
 
                 losses = model.optimize()
