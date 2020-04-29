@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import os
+import time
 import argparse
 
 import gym
@@ -18,6 +19,32 @@ CAR_COLOR = '#CC6600'
 MODEL_COLOR = '#0066CC'
 MAJOR_GRID_COLOR = '#CCCCCC'
 MINOR_GRID_COLOR = '#DDDDDD'
+
+class LapCounter():
+    def __init__(self, env):
+        self.start = env.track[1]
+        self.delta = env.track_width
+        self.t_sim = env.t
+        self.t_wall = time.time()
+        self.flag = False
+        self.laps = []
+
+    def update(self, state, t):
+        # determine distance to starting point
+        distance = np.linalg.norm(self.start[2:] - state[:2])
+
+        if distance <= self.delta and self.flag is True:
+            # calculate lap time
+            t_lap = (t - self.t_sim, time.time() - self.t_wall)
+            self.laps.append(t_lap)
+            print("[{}] lap #{} completed in {:.3f}s ({:.3f}s)".format(FILE, len(self.laps), t_lap[0], t_lap[1]))
+
+            # reset timers
+            self.t_sim = t
+            self.t_wall = time.time()
+            self.flag = False
+        elif distance > self.delta:
+            self.flag = True
 
 def plot_simulation(car,  env, agent=None, data=None, H=1):
     print("[{}] plotting simulation".format(FILE))
@@ -72,8 +99,8 @@ def plot_simulation(car,  env, agent=None, data=None, H=1):
     plt.show()
 
 def main(args):
-    assert os.path.splitext(args.dataset)[1] == '.npz'
     assert os.path.splitext(args.model)[1] == '.h5'
+    assert os.path.splitext(args.dataset)[1] == '.npz'
     assert args.control in ['robot', 'keyboard', 'xbox']
 
     # create environment
@@ -81,8 +108,10 @@ def main(args):
     gym.logger.set_level(gym.logger.ERROR)
     env = gym.make('CarRacing-v1').env
     state = env.reset()
-    states, actions, observations = [], [], []
     done = False
+    states = []
+    actions = []
+    observations = []
 
     # initialize agent
     agent = Agent(args.model, env)
@@ -90,12 +119,18 @@ def main(args):
     # initialize controller
     controller = initialize_controller(args.control, agent.model, env)
 
+    # start lap counter
+    counter = LapCounter(env)
+
     # run simulation
     print("[{}] running simulation (t = {}s)".format(FILE, int(env.t)))
     while not done:
         try:
             # render environment
             env.render()
+
+            # update lap counter
+            counter.update(state, env.t)
 
             # run control policy
             action, done = controller.step(state, env.t)
@@ -107,9 +142,6 @@ def main(args):
             states.append(np.array(state))
             actions.append(np.array(action))
             observations.append(np.array(observation))
-
-            #if args.control == 'robot':
-            #    agent.train((states, actions, observations), env.t)
 
             # update current state
             state = np.array(observation)
@@ -133,8 +165,8 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('-d', '--dataset', metavar='dataset', default='datasets/dynamics.npz')
     parser.add_argument('-m', '--model', metavar='model', default='models/dynamics.h5')
+    parser.add_argument('-d', '--dataset', metavar='dataset', default='datasets/dynamics.npz')
     parser.add_argument('-c', '--control', metavar='control', default='robot')
     args = parser.parse_args()
     main(args)

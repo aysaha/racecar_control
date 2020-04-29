@@ -3,7 +3,6 @@ import time
 import multiprocessing
 
 import numpy as np
-import matplotlib.pyplot as plt
 from pyglet.window import key
 import inputs
 
@@ -28,141 +27,20 @@ def initialize_controller(control, model, env):
 
     return controller
 
-# TODO - try Dubin's curves for computing minimum distance
-def closest_segment(state, trajectory, N):
-    start = np.linalg.norm(trajectory[:, :2] - state[:2], axis=1).argmin()
-    end = (start + N) % trajectory.shape[0]
-    return start, end
-
-def random_control(u_min, u_max):
-    u = (u_max - u_min) * np.random.rand(3) + u_min
-    return u
-
-def proportional_control(state, trajectory, u_min, u_max):
-    # controller gains
-    STEER_GAIN = 0.35
-    ACCEL_GAIN = 0.05
-    BRAKE_GAIN = 0.05
-
-    # unpack state vector
-    x, y, theta, v_x, v_y, omega = state[:6]
-
-    # create waypoint
-    start, end = closest_segment(state, trajectory, trajectory.shape[0]//100)
-    waypoint = trajectory[end, :2]
-
-    # get waypoint in body frame
-    g = twist_to_transform([x, y, theta])
-    g_inv = inverse_transform(g)
-    point = transform_point(g_inv, waypoint)
-    r, psi = polar(point)
-
-    # actual linear velocity
-    v = np.linalg.norm([v_x, v_y])
-
-    # desired linear velocity
-    v_d = np.linalg.norm([trajectory[start, 3:5]])
-    v_d *= abs(np.cos(psi))
-
-    # control is proportional to the error
-    steer = STEER_GAIN * -psi
-    accel = ACCEL_GAIN * (v_d - v)
-    brake = BRAKE_GAIN * (v - v_d)
-
-    # prevent stalling
-    if v < 10:
-        accel = 0.1
-        brake = 0.0
-
-    # limit brakes to prevent locking wheels
-    u = np.array([steer, accel, min(brake, 0.85)])
-
-    # saturate control
-    u = np.clip(u, u_min, u_max)
-    return u
-
-# TODO - multiprocessing / linearized model to speed up computations
-def model_predictive_control(state, trajectory, u_min, u_max, optimizer, model, dt, H=8, N=4):
-    # create reference trajectory
-    start, end = closest_segment(state, trajectory, (H+1) * N)
-
-    # handle index wrap
-    if start > end:
-        trajectory = np.vstack((trajectory[start:], trajectory[:end]))[::N]
-    else:
-        trajectory = trajectory[start:end:N]
-
-    # set up variables for optimizer
-    ts = dt * N
-    z_init = state[:6]
-    z_ref = trajectory.T
-
-    # run optimizer
-    u_opt = optimizer.run(z_init, z_ref, u_min, u_max, H, model, ts)
-
-    #plot_mpc(u_opt.T, z_init, z_ref.T, H, model, ts)
-
-    return u_opt[:, 0]
-
-def plot_mpc(u_opt, z_init, z_ref, H, model, dt, delta=0.1):
-    plt.figure(num='mpc', clear=True)
-    
-    z_opt = np.zeros((H+1, 6))
-    z_opt[0] = z_init
-
-    for k in range(H):
-        f = model.predict([z_opt[k].reshape(1, -1), u_opt[k].reshape(1, -1)])[0]
-        z_opt[k+1, :3] = z_opt[k, :3] + z_opt[k, 3:]*dt
-        z_opt[k+1, 2] = z_opt[k+1, 2] % (2*np.pi)
-        z_opt[k+1, 3:] = z_opt[k, 3:] + f*dt
-
-    # control
-    plt.subplot(2, 1, 1)
-    plt.title('Model Predictive Control (H = {})'.format(H))
-    plt.plot(range(1, H+1), u_opt[:, 0], '-o', color='C4', markersize=4, label='steering')
-    plt.plot(range(1, H+1), u_opt[:, 1], '-o', color='C2', markersize=4, label='throttle')
-    plt.plot(range(1, H+1), u_opt[:, 2], '-o', color='C3', markersize=4, label='brake')
-    plt.xlabel('step')
-    plt.xlim(1 - delta, H + delta)
-    plt.ylim(-1 - delta, 1 + delta)
-    plt.legend(loc='upper right')
-    plt.grid()
-
-    # position
-    plt.subplot(2, 2, 3)
-    plt.plot(z_ref[:, 0], z_ref[:, 1], '-o', markersize=4, label='ref')
-    plt.plot(z_opt[:, 0], z_opt[:, 1], '--o', markersize=4, label='opt')
-    plt.xlabel('x')
-    plt.ylabel('y')
-    plt.legend(loc='upper right')
-    plt.grid()
-
-    # orientation
-    plt.subplot(2, 2, 4)
-    plt.plot(np.arange(1, H+2), z_ref[:, 2], '-o', markersize=4, label='ref')
-    plt.plot(np.arange(1, H+2), z_opt[:, 2], '--o', markersize=4, label='opt')
-    plt.xlabel('step')
-    plt.ylabel('theta')
-    plt.xlim(1 - delta, H + delta)
-    plt.ylim(0 - delta, 2*np.pi + delta)
-    plt.legend(loc='upper right')
-    plt.grid()
-
-    plt.pause(1e-3)
-
 class RobotController:
-    def __init__(self, model, env, frequency=25):
+    def __init__(self, model, env, frequency=10):
         self.action = np.array([0.0, 0.0, 0.0])
         self.done = False
-        self.model = model
-        self.optimizer = NonlinearOptimizer()
+        self.optimizer = NonlinearOptimizer(model, 1.0/frequency)
         self.trajectory = plan_trajectory(env)
+        self.delta = env.track_width
         self.dt = env.dt
         self.z_min = env.observation_space.low
         self.z_max = env.observation_space.high
         self.u_min = env.action_space.low
         self.u_max = env.action_space.high
-        self.tick = int(1/(frequency*env.dt))
+        self.frequency = frequency
+        self.tick = int(1.0/(frequency*env.dt))
 
         env.viewer.window.on_key_press = self.on_key_press
 
@@ -172,13 +50,85 @@ class RobotController:
 
     def step(self, state, t):
         if int(t/self.dt) % self.tick == 0:
-            #self.action = random_control(self.u_min, self.u_max)
-            #self.action = proportional_control(state, self.trajectory, self.u_min, self.u_max)
-            self.action = model_predictive_control(state, self.trajectory,
-                                                   self.u_min, self.u_max, 
-                                                   self.optimizer, self.model, self.dt)
+            self.action = self.model_predictive_control(state, t)
+            #self.action = self.proportional_control(state)
+            #self.action = self.random_control()
             
         return self.action, self.done
+
+    def model_predictive_control(self, state, t, H=5):
+        # controller gains
+        P = np.diag([1e3, 1e3, 1e-9, 1e-3, 1e-3, 1])
+        Q = np.diag([1e3, 1e3, 1e-9, 1e-3, 1e-3, 1])
+        R = np.diag([1e-9, 1e-9, 1])
+
+        # create reference trajectory
+        start = int(t/self.dt) % self.trajectory.shape[0]
+        end = int(start + self.tick * (H+1)) % self.trajectory.shape[0]
+
+        # handle index wrap
+        if start > end:
+            trajectory = np.vstack((self.trajectory[start:], self.trajectory[:end]))
+        else:
+            trajectory = self.trajectory[start:end]
+
+        # set up variables for optimizer
+        z_init = state[:6]
+        z_ref = trajectory[::self.tick].T
+        u_init = np.tile([0.0, 0.5, 0.0], (H, 1)).T
+
+        # run optimizer
+        u_opt = self.optimizer.run(z_init, z_ref, u_init, self.u_min, self.u_max, P, Q, R, H)
+
+        return u_opt[:, 0]
+
+    def proportional_control(self, state):
+        # controller gains
+        STEER_GAIN = 0.35
+        ACCEL_GAIN = 0.02
+        BRAKE_GAIN = 0.02
+
+        # unpack state vector
+        x, y, theta, v_x, v_y, omega = state[:6]
+
+        # create waypoint
+        start = np.linalg.norm(self.trajectory[:, :2] - state[:2], axis=1).argmin()
+        end = (start + self.trajectory.shape[0]//100) % self.trajectory.shape[0]
+        waypoint = self.trajectory[end, :2]
+
+        # get waypoint in body frame
+        g = twist_to_transform([x, y, theta])
+        g_inv = inverse_transform(g)
+        point = transform_point(g_inv, waypoint)
+        r, psi = polar(point)
+
+        # actual linear velocity
+        v = np.linalg.norm([v_x, v_y])
+
+        # desired linear velocity
+        v_d = np.linalg.norm([self.trajectory[start, 3:5]])
+        v_d *= abs(np.cos(psi))
+
+        # control is proportional to the error
+        steer = STEER_GAIN * -psi
+        accel = ACCEL_GAIN * (v_d - v)
+        brake = BRAKE_GAIN * (v - v_d)
+
+        # prevent stalling
+        if v < 10:
+            accel = 0.1
+            brake = 0.0
+
+        # limit brakes to prevent locking wheels
+        u = np.array([steer, accel, min(brake, 0.85)])
+
+        # saturate control
+        u = np.clip(u, self.u_min, self.u_max)
+        return u
+
+    def random_control(self):
+        u = (self.u_max - self.u_min) * np.random.rand(3) + self.u_min
+        return u
 
 class KeyboardController:
     LEFT = -1.0

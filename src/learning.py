@@ -34,7 +34,7 @@ class Agent():
         save_model(self.path, self.model)
         
     def train(self, samples, t):
-        if int(t/self.dt) % (self.capacity//20) == 0:
+        if int(t/self.dt) % self.capacity == 0:
             states, actions, observations = map(np.array, samples)
 
             # only use recent samples
@@ -119,8 +119,8 @@ def build_model(n, m):
     u = layers.Input(shape=(m,), name='u')
     
     input_layer = layers.Concatenate(name ='input_layer')([z, u])
-    hidden_layer_1 = layers.Dense(32, activation='tanh', name='hidden_layer_1')(input_layer)
-    hidden_layer_2 = layers.Dense(32, activation='tanh', name='hidden_layer_2')(hidden_layer_1)
+    hidden_layer_1 = layers.Dense(64, activation='tanh', name='hidden_layer_1')(input_layer)
+    hidden_layer_2 = layers.Dense(64, activation='tanh', name='hidden_layer_2')(hidden_layer_1)
     output_layer = layers.Dense(n//2, activation='linear', name='output_layer')(hidden_layer_2)
 
     f = layers.Reshape((n//2,), name='f')(output_layer)
@@ -146,7 +146,7 @@ def train_model(model, dataset, split=0.25, batch_size=32, epochs=10, verbose=Tr
     end = time.time()
 
     # calculate training time
-    minutes, seconds = divmod(end-start, 60)
+    minutes, seconds = divmod(end - start, 60)
 
     if verbose:
         print("{}\n".format('_' * LINE_WIDTH))
@@ -171,8 +171,10 @@ def plot_training(results):
     plt.show()
 
 def main(args):
-    assert os.path.exists(args.dataset) and os.path.splitext(args.dataset)[1] == '.npz'
     assert os.path.splitext(args.model)[1] == '.h5'
+    assert os.path.exists(args.dataset) and os.path.splitext(args.dataset)[1] == '.npz'
+    assert args.batch_size > 0
+    assert args.epochs > 0
 
     # get discretization time
     gym.logger.set_level(gym.logger.ERROR)
@@ -188,7 +190,7 @@ def main(args):
     model = build_model(n=6, m=3)
 
     # train model
-    results = train_model(model, dataset, epochs=args.epochs)
+    results = train_model(model, dataset, batch_size=args.batch_size, epochs=args.epochs)
 
     # plot training results
     plot_training(results)
@@ -198,8 +200,9 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('-d', '--dataset', metavar='dataset', default='datasets/dynamics.npz')
     parser.add_argument('-m', '--model', metavar='model', default='models/dynamics.h5')
-    parser.add_argument('-e', '--epochs', metavar='epochs', default=100, type=int)
+    parser.add_argument('-d', '--dataset', metavar='dataset', default='datasets/dynamics.npz')
+    parser.add_argument('-b', '--batch_size', metavar='batch_size', default=32, type=int)
+    parser.add_argument('-e', '--epochs', metavar='epochs', default=10, type=int)
     args = parser.parse_args()
     main(args)
