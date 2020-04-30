@@ -7,7 +7,7 @@ import argparse
 import gym
 import numpy as np
 import matplotlib.pyplot as plt
-from keras import models, layers
+from keras import models, layers, backend as K
 
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
@@ -15,7 +15,7 @@ DIRECTORY = os.path.dirname(__file__)
 LINE_WIDTH = 98
 
 class Agent():
-    def __init__(self, path, env, capacity=1000):
+    def __init__(self, path, env, capacity=1000, lr=1e-6):
         print("[{}] initializing agent".format(FILE))
 
         if not os.path.exists(path):
@@ -28,13 +28,12 @@ class Agent():
         self.dt = env.dt
         self.path = path
         self.capacity = capacity
+        self.tick = capacity//2
 
-    def __del__(self):
-        print("[{}] deinitializing agent".format(FILE))
-        save_model(self.path, self.model)
+        K.set_value(self.model.optimizer.lr, lr)
         
     def train(self, samples, t):
-        if int(t/self.dt) % self.capacity == 0:
+        if int(t/self.dt) % self.tick == 0:
             states, actions, observations = map(np.array, samples)
 
             # only use recent samples
@@ -46,7 +45,7 @@ class Agent():
             dataset = format_dataset((states[::-1], actions[::-1], observations[::-1]), self.dt)
 
             # train model
-            results = train_model(self.model, dataset, split=0.75)
+            train_model(self.model, dataset, split=(self.tick/self.capacity), verbose=False)
 
     def dynamics(self, z, u):
         f = self.model.predict([z.reshape(1, -1), u.reshape(1, -1)])[0]
@@ -151,7 +150,11 @@ def train_model(model, dataset, split=0.25, batch_size=32, epochs=10, verbose=Tr
     if verbose:
         print("{}\n".format('_' * LINE_WIDTH))
     
-    print("[{}] model trained ({}m {}s)".format(FILE, int(minutes), int(seconds)))
+    if minutes > 0 and seconds < 0:
+        print("[{}] model trained ({}m {}s)".format(FILE, int(minutes), int(seconds)))
+    else:
+        print("[{}] model trained ({:.3f}s)".format(FILE, seconds))
+
     return history.history
 
 def plot_training(results):

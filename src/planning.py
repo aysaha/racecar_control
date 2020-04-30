@@ -5,7 +5,7 @@ import numpy as np
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
-def plan_trajectory(env, T=15):
+def plan_trajectory(env, T=20):
     print("[{}] planning trajectory".format(FILE))
 
     # parameterize trajectory with respect to time

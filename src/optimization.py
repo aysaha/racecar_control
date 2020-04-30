@@ -7,7 +7,7 @@ from casadi import *
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
-def plot_solution(u_opt, z_init, z_ref, H, model, ts, delta=0.1):
+def plot_solution(u_opt, z_init, z_ref, H, model, ts, border=0.1):
     plt.figure(num='solution', clear=True)
     
     z_opt = np.zeros((H+1, 6))
@@ -21,13 +21,13 @@ def plot_solution(u_opt, z_init, z_ref, H, model, ts, delta=0.1):
 
     # control
     plt.subplot(2, 1, 1)
-    plt.title('Optimal Solution (H = {})'.format(H))
+    plt.title('Model Predictive Control (H = {})'.format(H))
     plt.plot(range(1, H+1), u_opt[:, 0], '-o', color='C4', markersize=4, label='steering')
     plt.plot(range(1, H+1), u_opt[:, 1], '-o', color='C2', markersize=4, label='throttle')
     plt.plot(range(1, H+1), u_opt[:, 2], '-o', color='C3', markersize=4, label='brake')
     plt.xlabel('step')
-    plt.xlim(1 - delta, H + delta)
-    plt.ylim(-1 - delta, 1 + delta)
+    plt.xlim(1 - border, H + border)
+    plt.ylim(-1 - border, 1 + border)
     plt.legend(loc='upper right')
     plt.grid()
 
@@ -46,8 +46,8 @@ def plot_solution(u_opt, z_init, z_ref, H, model, ts, delta=0.1):
     plt.plot(np.arange(1, H+2), z_opt[:, 2], '--o', markersize=4, label='opt')
     plt.xlabel('step')
     plt.ylabel('theta')
-    plt.xlim(1 - delta, H + delta)
-    plt.ylim(0 - delta, 2*np.pi + delta)
+    plt.xlim(1 - border, H + border)
+    plt.ylim(0 - border, 2*np.pi + border)
     plt.legend(loc='upper right')
     plt.grid()
 
@@ -83,10 +83,9 @@ def J(u, z_init, z_ref, P, Q, R, H, model, ts):
     return cost
 
 class NonlinearOptimizer():
-    def __init__(self, model, ts, linear_solver='mumps'):
-        # default linear solver: 'mumps'
-        # faster linear solvers: 'ma27', 'ma57', 'ma77', 'ma86', 'ma97'
-        # requires external library (http://www.hsl.rl.ac.uk/ipopt/)        
+    # default linear solver: 'mumps'
+    # external linear solvers: 'ma27', 'ma57', 'ma77', 'ma86', 'ma97' (http://www.hsl.rl.ac.uk/ipopt/)
+    def __init__(self, model, ts=0.02, linear_solver='mumps'):
         self.options = {'print_level': 0, 'linear_solver': linear_solver}
         self.model = model
         self.ts = ts
