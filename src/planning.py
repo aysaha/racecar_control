@@ -5,8 +5,13 @@ import numpy as np
 FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
+<<<<<<< HEAD
 def plan_trajectory(env, T=20):
     print("[{}] planning trajectory".format(FILE))
+=======
+def plan_trajectory(env, T=15):
+    #print("[{}] planning trajectory".format(FILE))
+>>>>>>> 5ba0fc895eee4e679b03d6592bc448366716e96d
 
     # parameterize trajectory with respect to time
     waypoints = np.array(env.track)
