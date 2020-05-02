@@ -28,10 +28,13 @@ class Agent():
         self.dt = env.dt
         self.path = path
         self.capacity = capacity
+        self.lr = lr
         self.tick = capacity//2
-
-        K.set_value(self.model.optimizer.lr, lr)
         
+    def __del__(self):
+        print("[{}] deinitializing agent".format(FILE))
+        save_model(self.path, self.model)
+
     def train(self, samples, t):
         if int(t/self.dt) % self.tick == 0:
             states, actions, observations = map(np.array, samples)
@@ -45,7 +48,7 @@ class Agent():
             dataset = format_dataset((states[::-1], actions[::-1], observations[::-1]), self.dt)
 
             # train model
-            train_model(self.model, dataset, split=(self.tick/self.capacity), verbose=False)
+            train_model(self.model, dataset, split=(self.tick/self.capacity), lr=self.lr)
 
     def dynamics(self, z, u):
         f = self.model.predict([z.reshape(1, -1), u.reshape(1, -1)])[0]
@@ -133,11 +136,14 @@ def build_model(n, m):
 
     return model
 
-def train_model(model, dataset, split=0.25, batch_size=32, epochs=10, verbose=True):
+def train_model(model, dataset, split=0.25, batch_size=32, epochs=10, lr=1e-3, verbose=False):
     z, u, f = map(np.array, dataset)
 
     if verbose:
         print("{}".format('_' * LINE_WIDTH))
+
+    # set learning rate
+    K.set_value(model.optimizer.lr, lr)
 
     # record training progress
     start = time.time()
@@ -193,7 +199,7 @@ def main(args):
     model = build_model(n=6, m=3)
 
     # train model
-    results = train_model(model, dataset, batch_size=args.batch_size, epochs=args.epochs)
+    results = train_model(model, dataset, batch_size=args.batch_size, epochs=args.epochs, verbose=True)
 
     # plot training results
     plot_training(results)

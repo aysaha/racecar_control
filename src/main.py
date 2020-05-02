@@ -55,7 +55,7 @@ def plot_simulation(car,  env, agent=None, data=None, H=1):
 
     # plot track
     track = np.vstack((env.track, env.track[0]))
-    plt.plot(track[:, 2], track[:, 3], '-', linewidth=16, color=TRACK_COLOR, label="Track")
+    plt.plot(track[:, 2], track[:, 3], '-', linewidth=24, color=TRACK_COLOR, label="Track")
 
     # plot car
     car = np.array(car)
@@ -89,7 +89,7 @@ def plot_simulation(car,  env, agent=None, data=None, H=1):
     plt.title(title)
     plt.xlabel('x')
     plt.ylabel('y')
-    plt.legend(loc='upper right', borderpad=1.2, handletextpad=1.2)
+    plt.legend(loc='upper right', borderpad=1.5, labelspacing=1.5, handletextpad=2.5)
 
     # format grid
     plt.grid(which='major', color=MAJOR_GRID_COLOR)
@@ -106,12 +106,15 @@ def main(args):
     # create environment
     print("[{}] creating environment".format(FILE))
     gym.logger.set_level(gym.logger.ERROR)
-    env = gym.make('CarRacing-v1').env
+    env = gym.make('CarRacing-v1', seed=args.seed).env
+
+    # initialize environment
+    print("[{}] initializing environment ({})".format(FILE, env.id))
     state = env.reset()
-    done = False
     states = []
     actions = []
     observations = []
+    done = False
 
     # initialize agent
     agent = Agent(args.model, env)
@@ -143,6 +146,9 @@ def main(args):
             actions.append(np.array(action))
             observations.append(np.array(observation))
 
+            if args.control == 'robot':
+                agent.train((states, actions, observations), env.t)
+
             # update current state
             state = np.array(observation)
         except KeyboardInterrupt:
@@ -168,5 +174,6 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--model', metavar='model', default='models/dynamics.h5')
     parser.add_argument('-d', '--dataset', metavar='dataset', default='datasets/dynamics.npz')
     parser.add_argument('-c', '--control', metavar='control', default='robot')
+    parser.add_argument('-s', '--seed', metavar='seed', default=None, type=lambda x: int(x, 0))
     args = parser.parse_args()
     main(args)

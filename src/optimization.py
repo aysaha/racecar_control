@@ -83,10 +83,8 @@ def J(u, z_init, z_ref, P, Q, R, H, model, ts):
     return cost
 
 class NonlinearOptimizer():
-    # default linear solver: 'mumps'
-    # external linear solvers: 'ma27', 'ma57', 'ma77', 'ma86', 'ma97' (http://www.hsl.rl.ac.uk/ipopt/)
-    def __init__(self, model, ts=0.02, linear_solver='mumps'):
-        self.options = {'print_level': 0, 'linear_solver': linear_solver}
+    def __init__(self, model, ts=0.02):
+        self.options = {'print_level': 0}
         self.model = model
         self.ts = ts
 

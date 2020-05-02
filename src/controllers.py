@@ -17,7 +17,7 @@ def initialize_controller(control, model, env):
     print("[{}] initializing controller ({})".format(FILE, control))
 
     if control == 'robot':
-        controller = RobotController(model, env)
+        controller = RobotController(model, env, frequency=10)
     elif control == 'keyboard':
         controller = KeyboardController(env)
     elif control == 'xbox':
@@ -28,11 +28,11 @@ def initialize_controller(control, model, env):
     return controller
 
 class RobotController:
-    def __init__(self, model, env, frequency=10):
+    def __init__(self, model, env, frequency=50):
         self.action = np.array([0.0, 0.0, 0.0])
         self.done = False
-        self.optimizer = NonlinearOptimizer(model, 1.0/frequency)
-        self.trajectory = plan_trajectory(env)
+        self.optimizer = NonlinearOptimizer(model, ts=1/frequency)
+        self.trajectory = plan_trajectory(env, T=15)
         self.delta = env.track_width
         self.dt = env.dt
         self.z_min = env.observation_space.low
@@ -40,32 +40,41 @@ class RobotController:
         self.u_min = env.action_space.low
         self.u_max = env.action_space.high
         self.frequency = frequency
-        self.tick = int(1.0/(frequency*env.dt))
+        self.tick = int(1/(frequency*env.dt))
 
         env.viewer.window.on_key_press = self.on_key_press
+
+        # default linear solver: 'mumps'
+        # external linear solvers: 'ma27', 'ma57', 'ma77', 'ma86', 'ma97' (http://www.hsl.rl.ac.uk/ipopt/)
+        self.optimizer.options['linear_solver'] = 'ma57'
+        self.optimizer.options['ma57_automatic_scaling'] = 'yes'
 
     def on_key_press(self, k, mod):
         if k == key.Q:
             self.done = True
 
+    def closest_segment(self, state, N):
+        start = np.linalg.norm(self.trajectory[:, :2] - state[:2], axis=1).argmin()
+        end = (start + N) % self.trajectory.shape[0]
+        return start, end
+
     def step(self, state, t):
         if int(t/self.dt) % self.tick == 0:
-            self.action = self.model_predictive_control(state, t)
+            self.action = self.model_predictive_control(state)
             #self.action = self.proportional_control(state)
             #self.action = self.random_control()
             
         return self.action, self.done
 
-    def model_predictive_control(self, state, t, H=5):
+    def model_predictive_control(self, state, H=5):
         # controller gains
-        P = np.diag([1e3, 1e3, 1e-9, 1e-3, 1e-3, 1])
-        Q = np.diag([1e3, 1e3, 1e-9, 1e-3, 1e-3, 1])
-        R = np.diag([1e-9, 1e-9, 1])
+        P = np.diag([1e3, 1e3, 1e1, 1e-3, 1e-3, 1e1])
+        Q = np.diag([1e3, 1e3, 1e1, 1e-3, 1e-3, 1e1])
+        R = np.diag([1e-9, 1e-9, 1e-9])
 
         # create reference trajectory
-        start = int(t/self.dt) % self.trajectory.shape[0]
-        end = int(start + self.tick * (H+1)) % self.trajectory.shape[0]
-
+        start, end = self.closest_segment(state, (H+1)*self.tick)
+        
         # handle index wrap
         if start > end:
             trajectory = np.vstack((self.trajectory[start:], self.trajectory[:end]))
@@ -85,15 +94,14 @@ class RobotController:
     def proportional_control(self, state):
         # controller gains
         STEER_GAIN = 0.35
-        ACCEL_GAIN = 0.02
-        BRAKE_GAIN = 0.02
+        ACCEL_GAIN = 0.05
+        BRAKE_GAIN = 0.05
 
         # unpack state vector
         x, y, theta, v_x, v_y, omega = state[:6]
 
         # create waypoint
-        start = np.linalg.norm(self.trajectory[:, :2] - state[:2], axis=1).argmin()
-        end = (start + self.trajectory.shape[0]//100) % self.trajectory.shape[0]
+        start, end = self.closest_segment(state, self.trajectory.shape[0]//100)
         waypoint = self.trajectory[end, :2]
 
         # get waypoint in body frame
@@ -120,7 +128,7 @@ class RobotController:
             brake = 0.0
 
         # limit brakes to prevent locking wheels
-        u = np.array([steer, accel, min(brake, 0.85)])
+        u = np.array([steer, accel, min(brake, 0.8)])
 
         # saturate control
         u = np.clip(u, self.u_min, self.u_max)
