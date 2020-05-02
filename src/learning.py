@@ -49,7 +49,8 @@ class Agent():
             results = train_model(self.model, dataset, split=0.75)
 
     def dynamics(self, z, u):
-        f = self.model.predict([z.reshape(1, -1), u.reshape(1, -1)])[0]
+        f = self.model.predict(
+        np.hstack((z, u)).reshape(1, 1, -1))[0]
         F = np.zeros((6,))
 
         F[:3] = z[:3] + z[3:]*self.dt
@@ -112,20 +113,18 @@ def load_model(path):
 
     return model
 
-def build_model(n, m):
+def build_model(n, m, batch_size=32):
     print("[{}] building model".format(FILE))
 
-    z = layers.Input(shape=(n,), name='z')
-    u = layers.Input(shape=(m,), name='u')
+    size = n+m
+
+    input_layer = layers.Input(batch_shape=(batch_size, 1, size), name='input')
     
-    input_layer = layers.Concatenate(name ='input_layer')([z, u])
-    hidden_layer_1 = layers.Dense(32, activation='tanh', name='hidden_layer_1')(input_layer)
-    hidden_layer_2 = layers.Dense(32, activation='tanh', name='hidden_layer_2')(hidden_layer_1)
-    output_layer = layers.Dense(n//2, activation='linear', name='output_layer')(hidden_layer_2)
+    hidden_layer_1 = layers.LSTM(32, activation='tanh', stateful=True, name='hidden_layer_1')(input_layer)
+    # hidden_layer_2 = layers.Dense(32, activation='tanh', name='hidden_layer_2')(hidden_layer_1)
+    output_layer = layers.Dense(n//2, activation='linear', name='output_layer')(hidden_layer_1)
 
-    f = layers.Reshape((n//2,), name='f')(output_layer)
-
-    model = models.Model(inputs=[z, u], outputs=f, name='dynamics')
+    model = models.Model(inputs=input_layer, outputs=output_layer, name='dynamics')
     model.compile(loss='mean_squared_error', optimizer='rmsprop')
 
     print("{}".format('_' * LINE_WIDTH))
@@ -136,13 +135,15 @@ def build_model(n, m):
 
 def train_model(model, dataset, split=0.25, batch_size=32, epochs=10, verbose=True):
     z, u, f = map(np.array, dataset)
+    data = np.hstack((z, u))
+    data = data.reshape(data.shape[0], 1, data.shape[1])
 
     if verbose:
         print("{}".format('_' * LINE_WIDTH))
 
     # record training progress
     start = time.time()
-    history = model.fit([z, u], f, validation_split=split, batch_size=batch_size, epochs=epochs, verbose=verbose)
+    history = model.fit(data, f, validation_split=split, batch_size=batch_size, epochs=epochs, verbose=verbose, shuffle=False)
     end = time.time()
 
     # calculate training time
@@ -179,7 +180,7 @@ def main(args):
     dt = gym.make('CarRacing-v1').env.dt
 
     # load dataset
-    states, actions, observations = load_dataset(args.dataset, shuffle=True)
+    states, actions, observations = load_dataset(args.dataset, shuffle=False)
 
     # format dataset
     dataset = format_dataset((states, actions, observations), dt)
