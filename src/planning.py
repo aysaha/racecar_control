@@ -6,7 +6,7 @@ FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
 def plan_trajectory(env, T=15):
-    print("[{}] planning trajectory".format(FILE))
+    #print("[{}] planning trajectory".format(FILE))
 
     waypoints = np.array(env.track)
     M = waypoints.shape[0]

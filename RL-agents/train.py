@@ -20,7 +20,7 @@ if args.agent == 'DDPG':
     agent = DDPG
 
 elif args.agent == 'TD3':
-    agent = TD3
+	agent = TD3
 
 elif args.agent == 'SAC':
     agent = SAC
