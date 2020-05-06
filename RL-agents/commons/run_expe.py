@@ -156,6 +156,7 @@ def train(Agent, args):
 
                 #Compute the reward as how close to the old waypoint we are
                 reward = - (new_distance/10)**2 - action[0]**2 + np.sqrt(np.abs(vt))/7
+
                 episode_reward += reward
 
                 # Save transition into memory

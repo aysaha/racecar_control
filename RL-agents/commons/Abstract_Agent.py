@@ -130,7 +130,6 @@ class AbstractAgent(ABC):
                     new_modelstate = list(new_waypoint) + [new_curvature, vt,vn, omega] +list(next_state[6:])
                     new_distance = np.linalg.norm(new_waypoint)
 
-
                     #print(v_x, v_y, vt, next_state[6])
 
                     #Compute the reward as how close to the old waypoint we are
