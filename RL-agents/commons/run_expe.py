@@ -155,7 +155,8 @@ def train(Agent, args):
                 new_distance = np.linalg.norm(new_waypoint)
 
                 #Compute the reward as how close to the old waypoint we are
-                reward = - (new_distance/100)**2 - action[0]**2 + np.sqrt(np.abs(vt))/10
+                reward = - (new_distance/10)**2 - action[0]**2 + np.sqrt(np.abs(vt))/7
+
                 episode_reward += reward
 
                 # Save transition into memory
