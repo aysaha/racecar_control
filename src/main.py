@@ -99,7 +99,7 @@ def plot_simulation(car,  env, agent=None, data=None, H=1):
     plt.show()
 
 def main(args):
-    assert os.path.splitext(args.model)[1] == '.h5'
+    assert os.path.exists(args.model) and os.path.splitext(args.model)[1] == '.h5'
     assert os.path.splitext(args.dataset)[1] == '.npz'
     assert args.control in ['robot', 'keyboard', 'xbox']
 

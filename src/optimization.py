@@ -69,16 +69,17 @@ def f(z, u, model):
     return tensor
 
 def J(u, z_init, z_ref, P, Q, R, H, model, ts):
-    z = z_init
+    z = MX(6, H+1)
+    z[:, 0] = z_init
     cost = 0
 
     for k in range(H):
-        cost += (z - z_ref[:, k]).T @ Q @ (z - z_ref[:, k]) + u[:, k].T @ R @ u[:, k]
+        cost += (z[:, k] - z_ref[:, k]).T @ Q @ (z[:, k] - z_ref[:, k]) + u[:, k].T @ R @ u[:, k]
 
-        z[:3] = z[:3] + z[3:]*ts
-        z[3:] = z[3:] + f(z, u[:, k], model)*ts
+        z[:3, k+1] = z[:3, k] + z[3:, k]*ts
+        z[3:, k+1] = z[3:, k] + f(z[:, k], u[:, k], model)*ts
 
-    cost += (z - z_ref[:, H]).T @ P @ (z - z_ref[:, H])
+    cost += (z[:, H] - z_ref[:, H]).T @ P @ (z[:, H] - z_ref[:, H])
 
     return cost
 

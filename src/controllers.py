@@ -32,7 +32,7 @@ class RobotController:
         self.action = np.array([0.0, 0.0, 0.0])
         self.done = False
         self.optimizer = NonlinearOptimizer(model, ts=1/frequency)
-        self.trajectory = plan_trajectory(env, T=15)
+        self.trajectory = plan_trajectory(env, T=12)
         self.delta = env.track_width
         self.dt = env.dt
         self.z_min = env.observation_space.low
@@ -68,9 +68,9 @@ class RobotController:
 
     def model_predictive_control(self, state, H=5):
         # controller gains
-        P = np.diag([1e3, 1e3, 1e1, 1e-3, 1e-3, 1e1])
-        Q = np.diag([1e3, 1e3, 1e1, 1e-3, 1e-3, 1e1])
-        R = np.diag([1e-9, 1e-9, 1e-9])
+        P = np.diag([1e3, 1e3, 1e1, 1e1, 1e1, 1e1])
+        Q = np.diag([1e3, 1e3, 1e1, 1e1, 1e1, 1e1])
+        R = np.diag([1e1, 1e1, 1e1])
 
         # create reference trajectory
         start, end = self.closest_segment(state, (H+1)*self.tick)
@@ -84,7 +84,7 @@ class RobotController:
         # set up variables for optimizer
         z_init = state[:6]
         z_ref = trajectory[::self.tick].T
-        u_init = np.tile([0.0, 0.5, 0.0], (H, 1)).T
+        u_init = np.tile([0.0, 0.1, 0.0], (H, 1)).T
 
         # run optimizer
         u_opt = self.optimizer.run(z_init, z_ref, u_init, self.u_min, self.u_max, P, Q, R, H)

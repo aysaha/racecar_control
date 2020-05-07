@@ -15,25 +15,13 @@ DIRECTORY = os.path.dirname(__file__)
 LINE_WIDTH = 98
 
 class Agent():
-    def __init__(self, path, env, capacity=1000, lr=1e-6):
+    def __init__(self, path, env, capacity=1000, lr=1e-5):
         print("[{}] initializing agent".format(FILE))
-
-        if not os.path.exists(path):
-            n = env.observation_space.shape[0] - 5
-            m = env.action_space.shape[0]
-            self.model = build_model(n, m)
-        else:
-            self.model = load_model(path)
-
+        self.model = load_model(path)
         self.dt = env.dt
-        self.path = path
         self.capacity = capacity
         self.lr = lr
         self.tick = capacity//2
-        
-    def __del__(self):
-        print("[{}] deinitializing agent".format(FILE))
-        save_model(self.path, self.model)
 
     def train(self, samples, t):
         if int(t/self.dt) % self.tick == 0:
@@ -48,7 +36,7 @@ class Agent():
             dataset = format_dataset((states[::-1], actions[::-1], observations[::-1]), self.dt)
 
             # train model
-            train_model(self.model, dataset, split=(self.tick/self.capacity), lr=self.lr)
+            train_model(self.model, dataset, split=(self.tick/self.capacity), lr=self.lr, verbose=True)
 
     def dynamics(self, z, u):
         f = self.model.predict([z.reshape(1, -1), u.reshape(1, -1)])[0]
@@ -123,12 +111,12 @@ def build_model(n, m):
     input_layer = layers.Concatenate(name ='input_layer')([z, u])
     hidden_layer_1 = layers.Dense(64, activation='tanh', name='hidden_layer_1')(input_layer)
     hidden_layer_2 = layers.Dense(64, activation='tanh', name='hidden_layer_2')(hidden_layer_1)
-    output_layer = layers.Dense(n//2, activation='linear', name='output_layer')(hidden_layer_2)
+    output_layer = layers.Dense(n-3, activation='linear', name='output_layer')(hidden_layer_2)
 
-    f = layers.Reshape((n//2,), name='f')(output_layer)
+    f = layers.Reshape((n-3,), name='f')(output_layer)
 
     model = models.Model(inputs=[z, u], outputs=f, name='dynamics')
-    model.compile(loss='mean_squared_error', optimizer='rmsprop')
+    model.compile(loss='mean_squared_error', optimizer='adam')
 
     print("{}".format('_' * LINE_WIDTH))
     model.summary()
@@ -156,7 +144,7 @@ def train_model(model, dataset, split=0.25, batch_size=32, epochs=10, lr=1e-3, v
     if verbose:
         print("{}\n".format('_' * LINE_WIDTH))
     
-    if minutes > 0 and seconds < 0:
+    if minutes > 0:
         print("[{}] model trained ({}m {}s)".format(FILE, int(minutes), int(seconds)))
     else:
         print("[{}] model trained ({:.3f}s)".format(FILE, seconds))
@@ -168,7 +156,7 @@ def plot_training(results):
     plt.figure(num='training')
     epochs = range(len(results['loss']))
 
-    # plot training loss
+    # plot training and validation loss
     plt.plot(epochs, results['loss'], '-', label='Training') 
     plt.plot(epochs, results['val_loss'], '--', label='Validation')
     plt.title('Training')
@@ -199,7 +187,7 @@ def main(args):
     model = build_model(n=6, m=3)
 
     # train model
-    results = train_model(model, dataset, batch_size=args.batch_size, epochs=args.epochs, verbose=True)
+    results = train_model(model, dataset, batch_size=args.batch_size, epochs=args.epochs, lr=1e-4, verbose=True)
 
     # plot training results
     plot_training(results)
