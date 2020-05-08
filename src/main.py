@@ -168,6 +168,9 @@ def main(args):
     if args.control == 'robot':
         plot_simulation(observations, env)
     else:
+        np.save("save/simple/states.npy", states)
+        np.save("save/simple/actions.npy", actions)
+        np.save("save/simple/observations.npy", observations)
         plot_simulation(observations, env, agent=agent, data=(states, actions), H=25)
 
     # save dataset

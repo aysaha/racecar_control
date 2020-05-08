@@ -15,9 +15,9 @@ DIRECTORY = os.path.dirname(__file__)
 LINE_WIDTH = 98
 
 class Agent():
-    def __init__(self, path, env):
+    def __init__(self, model, env):
         print("[{}] initializing agent".format(FILE))
-        self.model = load_model(path)
+        self.model = load_model(model) if type(model) is str else model
         self.dt = env.dt
 
     def train(self, data, samples):
