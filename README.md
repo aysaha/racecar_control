@@ -13,5 +13,7 @@ User (Keyboard): `python src/main.py --control keyboard`
 User (Xbox Controller): `python src/main.py --control xbox`  
 
 ## Track Seeds
-Simple: `0xc4c3b3d54fd64f0b`
-Complex: `0x317c84fb9de3301d`
+Easy: `0xc4c3b3d54fd64f0b`  
+Medium: `0x317c84fb9de3301d`  
+Hard: `0x5c807aa31ca77693`
+

@@ -32,8 +32,11 @@ class LapCounter():
     def update(self, state, t):
         # determine distance to starting point
         distance = np.linalg.norm(self.start[2:] - state[:2])
+        complete = False
 
         if distance <= self.delta and self.flag is True:
+            complete = True
+
             # calculate lap time
             t_lap = (t - self.t_sim, time.time() - self.t_wall)
             self.laps.append(t_lap)
@@ -46,7 +49,9 @@ class LapCounter():
         elif distance > self.delta:
             self.flag = True
 
-def plot_simulation(car,  env, agent=None, data=None, H=1):
+        return complete
+
+def plot_simulation(car, env, agent=None, data=None, H=1):
     print("[{}] plotting simulation".format(FILE))
     plt.figure(num='simulation')
 
@@ -133,7 +138,7 @@ def main(args):
             env.render()
 
             # update lap counter
-            counter.update(state, env.t)
+            train = counter.update(state, env.t)
 
             # run control policy
             action, done = controller.step(state, env.t)
@@ -146,8 +151,8 @@ def main(args):
             actions.append(np.array(action))
             observations.append(np.array(observation))
 
-            if args.control == 'robot':
-                agent.train((states, actions, observations), env.t)
+            if args.control == 'robot' and train:
+                agent.train((states, actions, observations), int(counter.laps[-1][0]/env.dt))
 
             # update current state
             state = np.array(observation)
@@ -163,7 +168,7 @@ def main(args):
     if args.control == 'robot':
         plot_simulation(observations, env)
     else:
-        plot_simulation(observations, env, agent=agent, data=(states, actions), H=10)
+        plot_simulation(observations, env, agent=agent, data=(states, actions), H=25)
 
     # save dataset
     if args.control == 'xbox':

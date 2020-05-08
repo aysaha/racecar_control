@@ -15,28 +15,19 @@ DIRECTORY = os.path.dirname(__file__)
 LINE_WIDTH = 98
 
 class Agent():
-    def __init__(self, path, env, capacity=1000, lr=1e-5):
+    def __init__(self, path, env):
         print("[{}] initializing agent".format(FILE))
         self.model = load_model(path)
         self.dt = env.dt
-        self.capacity = capacity
-        self.lr = lr
-        self.tick = capacity//2
 
-    def train(self, samples, t):
-        if int(t/self.dt) % self.tick == 0:
-            states, actions, observations = map(np.array, samples)
+    def train(self, data, samples):
+        states, actions, observations = map(np.array, data)
 
-            # only use recent samples
-            states = states[-self.capacity:]
-            actions = actions[-self.capacity:]
-            observations = observations[-self.capacity:]
+        # format dataset
+        dataset = format_dataset((states[-samples:], actions[-samples:], observations[-samples:]), self.dt)
 
-            # format dataset
-            dataset = format_dataset((states[::-1], actions[::-1], observations[::-1]), self.dt)
-
-            # train model
-            train_model(self.model, dataset, split=(self.tick/self.capacity), lr=self.lr, verbose=True)
+        # train model
+        train_model(self.model, dataset, split=0, lr=1e-7)
 
     def dynamics(self, z, u):
         f = self.model.predict([z.reshape(1, -1), u.reshape(1, -1)])[0]
@@ -124,7 +115,7 @@ def build_model(n, m):
 
     return model
 
-def train_model(model, dataset, split=0.25, batch_size=32, epochs=10, lr=1e-3, verbose=False):
+def train_model(model, dataset, split=0.25, batch_size=32, epochs=10, lr=1e-4, verbose=False):
     z, u, f = map(np.array, dataset)
 
     if verbose:
@@ -187,7 +178,7 @@ def main(args):
     model = build_model(n=6, m=3)
 
     # train model
-    results = train_model(model, dataset, batch_size=args.batch_size, epochs=args.epochs, lr=1e-4, verbose=True)
+    results = train_model(model, dataset, batch_size=args.batch_size, epochs=args.epochs, verbose=True)
 
     # plot training results
     plot_training(results)
