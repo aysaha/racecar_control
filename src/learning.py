@@ -15,10 +15,11 @@ DIRECTORY = os.path.dirname(__file__)
 LINE_WIDTH = 98
 
 class Agent():
-    def __init__(self, model, env):
+    def __init__(self, model, env, lstm=False):
         print("[{}] initializing agent".format(FILE))
         self.model = load_model(model) if type(model) is str else model
         self.dt = env.dt
+        self.lstm = lstm
 
     def train(self, data, samples):
         states, actions, observations = map(np.array, data)
@@ -30,7 +31,10 @@ class Agent():
         train_model(self.model, dataset, split=0, lr=1e-7)
 
     def dynamics(self, z, u):
-        f = self.model.predict([z.reshape(1, -1), u.reshape(1, -1)])[0]
+        if not self.lstm:
+            f = self.model.predict([z.reshape(1, -1), u.reshape(1, -1)])[0]
+        else:
+            f = self.model.predict(np.hstack((z, u)).reshape(1, 1, -1))[0]
         F = np.zeros((6,))
 
         F[:3] = z[:3] + z[3:]*self.dt
