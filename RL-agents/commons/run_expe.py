@@ -63,7 +63,7 @@ def get_current_waypoint(trajectory, x, y):
 
 def waypoint_to_car_ref(waypoint, x, y, theta):
     g = twist_to_transform([x, y, theta])
-    g_inv = inv(g)
+    g_inv = inverse_transform(g)
     point = transform_point(g_inv, waypoint[:2])
     return point
 
@@ -132,6 +132,7 @@ def train(Agent, args):
                 done = 0
                 reward = 1
                 
+
                 #Get waypoint in the referential of the car
                 x, y, theta, v_x, v_y, omega = state[:6]
                 vt,vn = speed_to_car_ref(v_x, v_y, theta)
@@ -155,7 +156,7 @@ def train(Agent, args):
                 new_distance = np.linalg.norm(new_waypoint)
 
                 #Compute the reward as how close to the old waypoint we are
-                reward = - (new_distance/10)**2 - action[0]**2 + np.sqrt(np.abs(vt))/7
+                reward = - (new_distance/10)**2 - action[0]**2 + np.sqrt(np.abs(vt))/4
 
                 episode_reward += reward
 

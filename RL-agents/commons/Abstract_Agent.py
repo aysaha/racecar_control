@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 import os
+from time import time
 import imageio
 import gym
 import numpy as np
@@ -16,6 +17,7 @@ from commons.utils import NormalizedActions, ReplayMemory
 import sys
 sys.path.append("../src")
 from utils import *
+from main import LapCounter, plot_simulation
 from planning import plan_trajectory
 
 def get_current_waypoint(trajectory, x, y):
@@ -36,7 +38,7 @@ def get_current_waypoint(trajectory, x, y):
 
 def waypoint_to_car_ref(waypoint, x, y, theta):
     g = twist_to_transform([x, y, theta])
-    g_inv = inv(g)
+    g_inv = inverse_transform(g)
     point = transform_point(g_inv, waypoint[:2])
     return point
 
@@ -55,7 +57,7 @@ class AbstractAgent(ABC):
         self.device = device
         self.memory = ReplayMemory(self.config['MEMORY_CAPACITY'])
         #self.eval_env = NormalizedActions(gym.make(**self.config['GAME']))
-        self.eval_env = gym.make('CarRacing-v1').env
+        self.eval_env = gym.make('CarRacing-v1', seed = 0x5c807aa31ca77693).env
         self.continuous = bool(self.eval_env.action_space.shape)
 
         self.state_size = 11 #self.eval_env.observation_space.shape[0]
@@ -100,12 +102,19 @@ class AbstractAgent(ABC):
         try:
             for i in range(n_ep):
                 state = self.eval_env.reset()
+                self.lp = LapCounter(self.eval_env)
+                self.states = []
+
                 trajectory = plan_trajectory(self.eval_env)
                 reward = 0
                 done = False
                 steps = 0
                 while not done and steps < self.config['MAX_STEPS']:
                     
+
+                    #Lap counting
+                    self.lp.update(state, self.eval_env.t)
+                    self.states += [(self.eval_env.state[0], self.eval_env.state[1])]
 
                     #Get waypoint in the referential of the car
                     x, y, theta, v_x, v_y, omega = state[:6]
@@ -130,10 +139,9 @@ class AbstractAgent(ABC):
                     new_modelstate = list(new_waypoint) + [new_curvature, vt,vn, omega] +list(next_state[6:])
                     new_distance = np.linalg.norm(new_waypoint)
 
-                    #print(v_x, v_y, vt, next_state[6])
 
                     #Compute the reward as how close to the old waypoint we are
-                    r = - (new_distance/10)**2 - action[0]**2 + np.sqrt(np.abs(vt))/7
+                    r = - (new_distance/10)**2 - action[0]**2 + np.sqrt(np.abs(vt))/4
 
                     if render:
                         self.eval_env.render()
@@ -148,7 +156,12 @@ class AbstractAgent(ABC):
                 raise
 
         finally:
+            self.states = np.array(self.states)
+            #print(self.states[:,0])
+            plot_simulation(self.states,  self.eval_env)
+
             self.eval_env.close()
+
             if gif:
                 print(f"Saved gif in {self.folder+'/results.gif'}")
                 writer.close()
