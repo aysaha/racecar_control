@@ -8,7 +8,7 @@ FILE = os.path.basename(__file__)
 DIRECTORY = os.path.dirname(__file__)
 
 def plot_solution(u_opt, z_init, z_ref, H, model, ts, border=0.1):
-    plt.figure(num='solution', clear=True)
+    plt.figure(num='mpc', clear=True)
     
     z_opt = np.zeros((H+1, 6))
     z_opt[0] = z_init

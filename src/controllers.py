@@ -28,30 +28,33 @@ def initialize_controller(control, model, env):
     return controller
 
 class RobotController:
-    def __init__(self, model, env, frequency=50):
+    def __init__(self, model, env, frequency=50, T=20):
         self.action = np.array([0.0, 0.0, 0.0])
         self.done = False
-        self.optimizer = NonlinearOptimizer(model, ts=1/frequency)
-        self.trajectory = plan_trajectory(env, T=12)
-        self.delta = env.track_width
         self.dt = env.dt
         self.z_min = env.observation_space.low
         self.z_max = env.observation_space.high
         self.u_min = env.action_space.low
         self.u_max = env.action_space.high
         self.frequency = frequency
+        self.T = T
         self.tick = int(1/(frequency*env.dt))
-
+        self.optimizer = NonlinearOptimizer(model, ts=1/frequency)
+        self.trajectory = plan_trajectory(env, T=T)
+        
         env.viewer.window.on_key_press = self.on_key_press
 
         # default linear solver: 'mumps'
         # external linear solvers: 'ma27', 'ma57', 'ma77', 'ma86', 'ma97' (http://www.hsl.rl.ac.uk/ipopt/)
         self.optimizer.options['linear_solver'] = 'ma57'
-        self.optimizer.options['ma57_automatic_scaling'] = 'yes'
 
     def on_key_press(self, k, mod):
         if k == key.Q:
             self.done = True
+
+    def update_trajectory(self, env, T):
+        self.T = T
+        self.trajectory = plan_trajectory(env, T=T)
 
     def closest_segment(self, state, N):
         start = np.linalg.norm(self.trajectory[:, :2] - state[:2], axis=1).argmin()
@@ -60,17 +63,25 @@ class RobotController:
 
     def step(self, state, t):
         if int(t/self.dt) % self.tick == 0:
+            start = time.time()
             self.action = self.model_predictive_control(state)
             #self.action = self.proportional_control(state)
             #self.action = self.random_control()
+            end = time.time()
+
+            t_step = end - start
+
+            if t_step > 1/self.frequency:
+                print("[{}] real-time violation ({:.3f}s)".format(FILE, t_step - 1/self.frequency))
             
         return self.action, self.done
 
     def model_predictive_control(self, state, H=5):
         # controller gains
-        P = np.diag([1e3, 1e3, 1e1, 1e1, 1e1, 1e1])
-        Q = np.diag([1e3, 1e3, 1e1, 1e1, 1e1, 1e1])
-        R = np.diag([1e1, 1e1, 1e1])
+        K = np.diag([0.05, 0.01, 0.01])
+        P = np.diag([25, 25, 1, 1, 1, 1])
+        Q = np.diag([25, 25, 1, 1, 1, 1])
+        R = np.diag([1, 1, 1])
 
         # create reference trajectory
         start, end = self.closest_segment(state, (H+1)*self.tick)
@@ -81,12 +92,26 @@ class RobotController:
         else:
             trajectory = self.trajectory[start:end]
 
-        # set up variables for optimizer
-        z_init = state[:6]
-        z_ref = trajectory[::self.tick].T
-        u_init = np.tile([0.0, 0.1, 0.0], (H, 1)).T
+        # create waypoint
+        waypoint = self.trajectory[(start + self.tick) % self.trajectory.shape[0], :2]
+
+        # transform waypoint to car frame
+        g = twist_to_transform(state[:3])
+        point = transform_point(inverse_transform(g), waypoint)
+        r, psi = polar(point)
+
+        # determine velocity error
+        v = np.linalg.norm(state[3:5])
+        v_d = np.linalg.norm([self.trajectory[start, 3:5]]) * abs(np.cos(psi))
+        e = v_d - v
+
+        # compute control
+        u = np.clip(K @ [-psi, e, -e], self.u_min, self.u_max)
 
         # run optimizer
+        z_init = state[:6]
+        z_ref = trajectory[::self.tick].T
+        u_init = np.tile(u, (H, 1)).T
         u_opt = self.optimizer.run(z_init, z_ref, u_init, self.u_min, self.u_max, P, Q, R, H)
 
         return u_opt[:, 0]

@@ -131,14 +131,14 @@ def main(args):
     counter = LapCounter(env)
 
     # run simulation
-    print("[{}] running simulation (t = {}s)".format(FILE, int(env.t)))
+    print("[{}] starting simulation (t = {}s)".format(FILE, int(env.t)))
     while not done:
         try:
             # render environment
             env.render()
 
             # update lap counter
-            train = counter.update(state, env.t)
+            complete = counter.update(state, env.t)
 
             # run control policy
             action, done = controller.step(state, env.t)
@@ -151,8 +151,15 @@ def main(args):
             actions.append(np.array(action))
             observations.append(np.array(observation))
 
-            if args.control == 'robot' and train:
-                agent.train((states, actions, observations), int(counter.laps[-1][0]/env.dt))
+            if args.control == 'robot' and complete:
+                lap = counter.laps[-1][0]
+
+                # train agent
+                agent.train((states, actions, observations), int(lap/env.dt))
+
+                # replan trajectory
+                if lap < controller.T * 1.1:
+                    controller.update_trajectory(env, controller.T - 0.5)
 
             # update current state
             state = np.array(observation)

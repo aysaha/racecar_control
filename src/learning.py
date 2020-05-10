@@ -17,7 +17,7 @@ LINE_WIDTH = 98
 class Agent():
     def __init__(self, model, env, lstm=False):
         print("[{}] initializing agent".format(FILE))
-        self.model = load_model(model) if type(model) is str else model
+        self.model = load_model(model, freeze=False) if type(model) is str else model
         self.dt = env.dt
         self.lstm = lstm
 
@@ -28,7 +28,7 @@ class Agent():
         dataset = format_dataset((states[-samples:], actions[-samples:], observations[-samples:]), self.dt)
 
         # train model
-        train_model(self.model, dataset, split=0, lr=1e-7)
+        train_model(self.model, dataset, split=0)
 
     def dynamics(self, z, u):
         if not self.lstm:
@@ -38,7 +38,6 @@ class Agent():
         F = np.zeros((6,))
 
         F[:3] = z[:3] + z[3:]*self.dt
-        F[2] = F[2] % (2*np.pi)
         F[3:] = z[3:] + f*self.dt
 
         return F
@@ -87,10 +86,16 @@ def save_model(path, model):
     print("[{}] saving model ({})".format(FILE, path))
     model.save(path)
 
-def load_model(path):
+def load_model(path, freeze=False):
     print("[{}] loading model ({})".format(FILE, path))
     model = models.load_model(path)
     
+    if freeze:
+        model.get_layer('hidden_layer_1').trainable = False
+        model.get_layer('hidden_layer_2').trainable = False
+        model.get_layer('output_layer').trainable = True
+        model.compile(loss='mean_squared_error', optimizer='adam')
+
     print("{}".format('_' * LINE_WIDTH))
     model.summary()
     print("")
