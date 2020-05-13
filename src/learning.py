@@ -17,7 +17,7 @@ LINE_WIDTH = 98
 class Agent():
     def __init__(self, model, env, lstm=False):
         print("[{}] initializing agent".format(FILE))
-        self.model = load_model(model, freeze=False) if type(model) is str else model
+        self.model = load_model(model) if type(model) is str else model
         self.dt = env.dt
         self.lstm = lstm
 
@@ -86,15 +86,9 @@ def save_model(path, model):
     print("[{}] saving model ({})".format(FILE, path))
     model.save(path)
 
-def load_model(path, freeze=False):
+def load_model(path):
     print("[{}] loading model ({})".format(FILE, path))
     model = models.load_model(path)
-    
-    if freeze:
-        model.get_layer('hidden_layer_1').trainable = False
-        model.get_layer('hidden_layer_2').trainable = False
-        model.get_layer('output_layer').trainable = True
-        model.compile(loss='mean_squared_error', optimizer='adam')
 
     print("{}".format('_' * LINE_WIDTH))
     model.summary()
@@ -109,8 +103,8 @@ def build_model(n, m):
     u = layers.Input(shape=(m,), name='u')
     
     input_layer = layers.Concatenate(name ='input_layer')([z, u])
-    hidden_layer_1 = layers.Dense(64, activation='tanh', name='hidden_layer_1')(input_layer)
-    hidden_layer_2 = layers.Dense(64, activation='tanh', name='hidden_layer_2')(hidden_layer_1)
+    hidden_layer_1 = layers.Dense(32, activation='tanh', name='hidden_layer_1')(input_layer)
+    hidden_layer_2 = layers.Dense(32, activation='tanh', name='hidden_layer_2')(hidden_layer_1)
     output_layer = layers.Dense(n-3, activation='linear', name='output_layer')(hidden_layer_2)
 
     f = layers.Reshape((n-3,), name='f')(output_layer)

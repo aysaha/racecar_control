@@ -159,7 +159,7 @@ def main(args):
 
                 # replan trajectory
                 if lap < controller.T * 1.1:
-                    controller.update_trajectory(env, controller.T - 0.5)
+                    controller.update_trajectory(env, controller.T - 1)
 
             # update current state
             state = np.array(observation)

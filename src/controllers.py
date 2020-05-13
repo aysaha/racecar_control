@@ -17,7 +17,7 @@ def initialize_controller(control, model, env):
     print("[{}] initializing controller ({})".format(FILE, control))
 
     if control == 'robot':
-        controller = RobotController(model, env, frequency=10)
+        controller = RobotController(model, env)
     elif control == 'keyboard':
         controller = KeyboardController(env)
     elif control == 'xbox':
@@ -28,7 +28,7 @@ def initialize_controller(control, model, env):
     return controller
 
 class RobotController:
-    def __init__(self, model, env, frequency=50, T=20):
+    def __init__(self, model, env, frequency=10, T=20):
         self.action = np.array([0.0, 0.0, 0.0])
         self.done = False
         self.dt = env.dt
@@ -45,7 +45,8 @@ class RobotController:
         env.viewer.window.on_key_press = self.on_key_press
 
         # default linear solver: 'mumps'
-        # external linear solvers: 'ma27', 'ma57', 'ma77', 'ma86', 'ma97' (http://www.hsl.rl.ac.uk/ipopt/)
+        # external linear solvers: 'ma27', 'ma57', 'ma77', 'ma86', 'ma97'
+        # available from http://www.hsl.rl.ac.uk/ipopt/
         self.optimizer.options['linear_solver'] = 'ma57'
 
     def on_key_press(self, k, mod):
@@ -63,24 +64,21 @@ class RobotController:
 
     def step(self, state, t):
         if int(t/self.dt) % self.tick == 0:
-            start = time.time()
+            #start = time.time()
             self.action = self.model_predictive_control(state)
             #self.action = self.proportional_control(state)
             #self.action = self.random_control()
-            end = time.time()
-
-            t_step = end - start
-
-            if t_step > 1/self.frequency:
-                print("[{}] real-time violation ({:.3f}s)".format(FILE, t_step - 1/self.frequency))
+            #end = time.time()
+            
+            #print("[{}] t_step = {:.3f}s".format(FILE, end - start))
             
         return self.action, self.done
 
     def model_predictive_control(self, state, H=5):
         # controller gains
         K = np.diag([0.05, 0.01, 0.01])
-        P = np.diag([25, 25, 1, 1, 1, 1])
-        Q = np.diag([25, 25, 1, 1, 1, 1])
+        P = np.diag([100, 100, 1, 1, 1, 1])
+        Q = np.diag([100, 100, 1, 1, 1, 1])
         R = np.diag([1, 1, 1])
 
         # create reference trajectory
