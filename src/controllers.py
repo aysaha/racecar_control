@@ -112,6 +112,10 @@ class RobotController:
         u_init = np.tile(u, (H, 1)).T
         u_opt = self.optimizer.run(z_init, z_ref, u_init, self.u_min, self.u_max, P, Q, R, H)
 
+        # prevent stalling
+        if v < 10 and u_opt[1, 0] - u_opt[2, 0] < 0.1:
+            u_opt[:, 0] = [1.0*np.sign(u[0]), 0.1, 0.0]
+
         return u_opt[:, 0]
 
     def proportional_control(self, state):
