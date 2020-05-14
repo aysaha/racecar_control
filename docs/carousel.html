@@ -1,0 +1,196 @@
+<!DOCTYPE HTML>
+<!--
+	Stellar by HTML5 UP
+	html5up.net | @ajlkn
+	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
+-->
+<html>
+	<head>
+		<title>Generic - Stellar by HTML5 UP</title>
+		<meta charset="utf-8"/>
+		<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+		<link rel="stylesheet" href="assets/css/carousel.css" />
+	</head>
+	<body>
+	<!--
+autor: Marco Barría
+https://twitter.com/marco_bf
+-->
+
+	<div class="slider--teams">
+		<div class="slider--teams__team">
+			<ul id="list" class="cf">
+
+				<li>
+					<figure>
+						<div>
+							<div></div>
+						</div>
+						<figcaption>
+							<h2>Ayusman Saha</h2>
+							<p>Electrical Engineering and Computer Science graduate student.</p>
+						</figcaption>
+					</figure>
+				</li>
+
+				<li>
+					<figure class="active">
+						<div>
+							<div></div>
+						</div>
+						<figcaption>
+							<h2>Léo Toulet</h2>
+							<p>Electrical Engineering and Computer Science graduate student.</p>
+						</figcaption>
+					</figure>
+				</li>
+
+				<li>
+					<figure>
+						<div>
+							<div></div>
+						</div>
+						<figcaption>
+							<h2>Philippe Ferreira De Sousa</h2>
+							<p>Data science graduate student.</p>
+						</figcaption>
+					</figure>
+				</li>
+			</ul>
+		</div>
+	</div>
+	</body>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.1.3/jquery.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/velocity/1.1.0/velocity.min.js"></script>
+	<script>
+		var sliderTeam = (function(document, $) {
+
+			'use strict';
+
+			var $sliderTeams = $('.slider--teams'),
+					$list = $('#list'),
+					$listItems = $('#list li'),
+					$nItems = $listItems.length,
+					$nView = 3,
+					autoSlider,
+					$current = 1,
+					$isAuto = true,
+					$acAuto = 5000,
+
+					_init = function() {
+						_initWidth();
+						_eventInit();
+						_moveIt($listItems.eq(1), 1)
+					},
+
+					_initWidth = function() {
+						$list.css({
+							'margin-left': ~~(100 / $nView) + '%',
+							'width': ~~(100 * ($nItems / $nView)) + '%'
+						});
+						$listItems.css('width', 100 / $nItems + '%');
+						$sliderTeams.velocity({ opacity: 1 }, { display: "block" }, { delay:1000 });
+					},
+
+					_eventInit = function() {
+
+						window.requestAnimFrame = (function() {
+							return  window.requestAnimationFrame       ||
+									window.webkitRequestAnimationFrame ||
+									window.mozRequestAnimationFrame    ||
+									window.oRequestAnimationFrame      ||
+									window.msRequestAnimationFrame     ||
+									function(callback, element){
+										window.setTimeout(callback, 1000 / 60);
+									};
+						})();
+
+						window.requestInterval = function(fn, delay) {
+							if( !window.requestAnimationFrame       &&
+									!window.webkitRequestAnimationFrame &&
+									!window.mozRequestAnimationFrame    &&
+									!window.oRequestAnimationFrame      &&
+									!window.msRequestAnimationFrame)
+								return window.setInterval(fn, delay);
+							var start = new Date().getTime(),
+									handle = new Object();
+
+							function loop() {
+								var current = new Date().getTime(),
+										delta = current - start;
+								if(delta >= delay) {
+									fn.call();
+									start = new Date().getTime();
+								}
+								handle.value = requestAnimFrame(loop);
+							};
+							handle.value = requestAnimFrame(loop);
+							return handle;
+						}
+
+						window.clearRequestInterval = function(handle) {
+							window.cancelAnimationFrame ? window.cancelAnimationFrame(handle.value) :
+									window.webkitCancelRequestAnimationFrame ? window.webkitCancelRequestAnimationFrame(handle.value)   :
+											window.mozCancelRequestAnimationFrame ? window.mozCancelRequestAnimationFrame(handle.value) :
+													window.oCancelRequestAnimationFrame ? window.oCancelRequestAnimationFrame(handle.value) :
+															window.msCancelRequestAnimationFrame ? msCancelRequestAnimationFrame(handle.value) :
+																	clearInterval(handle);
+						};
+
+						$.each($listItems, function(i) {
+							var $this = $(this);
+							$this.on('touchstart click', function(e) {
+								e.preventDefault();
+								_stopMove(i);
+								_moveIt($this, i);
+							});
+						});
+
+						autoSlider = requestInterval(_autoMove, $acAuto);
+					},
+
+					_moveIt = function(obj, x) {
+
+						var n = x;
+
+						obj.find('figure').addClass('active');
+						$listItems.not(obj).find('figure').removeClass('active');
+
+						$list.velocity({
+							translateX: ~~((-(100 / $nItems)) * n) + '%',
+							translateZ: 0
+						}, {
+							duration: 1000,
+							easing: [400, 26],
+							queue: false
+						});
+
+					},
+
+					_autoMove = function(currentSlide) {
+						if ($isAuto) {
+							$current = ~~(($current + 1) % $nItems);
+						} else {
+							$current = currentSlide;
+						}
+						_moveIt($listItems.eq($current), $current);
+					},
+
+					_stopMove = function(x) {
+						clearRequestInterval(autoSlider);
+						$isAuto = false;
+						_autoMove(x);
+					};
+
+			return {
+				init: _init
+			};
+
+		})(document, jQuery);
+
+		$(window).load(function(){
+			'use strict';
+			sliderTeam.init();
+		});
+	</script>
+</html>
