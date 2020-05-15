@@ -6,7 +6,7 @@
 -->
 <html lang="en">
     <head>
-        <title>Racecar</title>
+        <title>Autonomous Racing</title>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
         <link rel="stylesheet" href="assets/css/main.css" />
@@ -20,14 +20,14 @@
         <div id="wrapper">
             <!-- Header -->
             <header id="header" class="alt">
-                <h1>Racecar</h1>
-                <h2>Data-Driven Control for Autonomous Racing</h2>
-
+                <h1>Autonomous Racing</h1>
+                <h1>with Data-Driven Control</h1>
+                <h2>EECS 206B Final Project</h2>
 
                 <iframe class="youtube"
-                        width="850"
-                        height="478"
                         src="https://www.youtube.com/embed/46xs_KCOxsg"
+                        width="69%"
+                        height="480"
                         frameborder="0"
                         allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
                         allowfullscreen>
@@ -45,9 +45,9 @@
             <nav id="nav">
                 <ul>
                     <li><a href="#overview" class="active">Overview</a></li>
-                    <li><a href="#design">Design</a></li>
                     <li><a href="#implementation">Implementation</a></li>
-                    <li><a href="#improvements">Improvements</a></li>
+                    <li><a href="#results">Results</a></li>
+                    <li><a href="#summary">Summary</a></li>
                     <li><a href="#team">Team</a></li>
                 </ul>
             </nav>
@@ -59,28 +59,29 @@
                     <div class="spotlight">
                         <div class="content">
                             <header class="major">
-                                <h2>Introduction</h2>
+                                <h2>Overview</h2>
                             </header>
                             <p style="text-align: justify;">
-                                Racecar is...
-                            </p>
-                        </div>
-                        <span class="image"><img src="res/human_control.gif"/></span>
-                    </div>
-                </section>
+                                Autonomous racing is a subset of self-driving that deals with
+                                navigating a vehicle around a track in the shortest amount of time.
+                                Because racing involves fast maneuvers, control logic has to be
+                                computed efficiently to ensure real-time performance. Stability is
+                                also important since optimal performance occurs close to the limits
+                                of the system. This is difficult in situations with unknown 
+                                dynamics.</br></br>
 
-                <!-- Design -->
-                <section id="design" class="main">
-                    <div class="spotlight">
-                        <div class="content">
-                            <header class="major">
-                                <h2>Design</h2>
-                            </header>
-                            <p style="text-align: justify;">
-                                TODO
+                                We present two data-driven control laws for solving this problem 
+                                in a modified version of OpenAI Gym's CarRacing-v0 environment.
+                                The first is a model-free approach that uses reinforcement learning
+                                to determine the best control input at a given state. The second is
+                                a model-based approach that applies model predictive control with
+                                learned system dynamics.
                             </p>
                         </div>
-                    </div>
+                        <div style="display: flex; justify-content: flex-end">
+                                <img style="position:relative; top: 60px; width: 90%"
+                                     src="res/human_control.gif"/>
+                        </div>
                 </section>
 
                 <!-- Implementation -->
@@ -94,18 +95,10 @@
                                 TODO
                             </p>
                             <div style="display: flex; justify-content: center">
-                                <img style="width:75%;" src="", alt="TODO image"/>
+                                <img style="width:30%;margin:0px 5px;" src="res/p_control.gif"/>
+                                <img style="width:30%;margin:0px 5px;" src="res/rl_control.gif"/>
+                                <img style="width:30%;margin:0px 5px;" src="res/mpc.gif"/>
                             </div>
-                            <p style="text-align: justify;">
-                                <br/>
-                                TODO
-                                <br/>
-                                <br/>
-                                <code>src/learning.py</code> is TODO
-                                <br/>
-                                <br/>
-                                TODO
-                            </p>
                         </div>
                     </div>
                 </section>
@@ -119,23 +112,21 @@
                             </header>
                             <p style="text-align: justify;">
                                 TODO
-                                <br/>
-                                <br/>
-                                TODO
                             </p>
                             <div style="display: flex; justify-content: center">
-                                <img style="width:75%;" src="res/rl_control.gif"/>
+                                <img style="width:40%;margin:0px 10px;" src="res/training_car.gif"/>
+                                <img style="width:40%;margin:0px 10px;" src="res/training_graph.gif"/>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <!-- Improvements -->
-                <section id="improvements" class="main">
+                <!-- Summary -->
+                <section id="summary" class="main">
                     <div class="spotlight">
                         <div class="content">
                             <header class="major">
-                                <h2>Improvements</h2>
+                                <h2>Summary</h2>
                             </header>
                             <p style="text-align: justify;">
                                 TODO
@@ -145,24 +136,50 @@
                 </section>
 
                 <!-- Team -->
-                <section id="team" class="main special">
-                    <header class="major">
-                        <h2>Team</h2>
-                        <iframe width="100%"
-                                height="480px"
-                                frameborder="0"
-                                src="./carousel.html"></iframe>
-                    </header>
+
+                <section id="team" class="main">
+                    <div class="spotlight">
+                        <div class="content">
+                            <header class="major">
+                                <h2>Team</h2>
+                            </header>
+                        </div>
+                    </div>
+
+                    <div class="spotlight">
+                        <div class="content">
+                            <p style="text-align: justify;">
+                                Ayusman is ...
+                            </p>
+                        </div>
+                        <span class="image"><img src="res/ayusman.jpg"/></span>
+                    </div>
+
+                    <div class="spotlight">
+                        <div class="content">
+                            <p style="text-align: justify;">
+                                Léo is ...
+                            </p>
+                        </div>
+                        <span class="image"><img src="res/leo.jpg"/></span>
+                    </div>
+
+                    <div class="spotlight">
+                        <div class="content">
+                            <p style="text-align: justify;">
+                                Philippe is ...
+                            </p>
+                        </div>
+                        <span class="image"><img src="res/philippe.jpg"/></span>
+                    </div>
                 </section>
             </div>
 
             <!-- Footer -->
             <footer id="footer">
                 <p>
-                    Introduction to Robotics
-                    <br/>
-                    Electrical Engineering and Computer Sciences
-                    <br/>
+                    Robotic Manipulation and Interaction<br/>
+                    Electrical Engineering and Computer Sciences<br/>
                     University of California, Berkeley
                 </p>
             </footer>
