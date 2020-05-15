@@ -12,7 +12,7 @@
         <link rel="stylesheet" href="assets/css/main.css" />
         <link rel="stylesheet" href="assets/css/custom.css" />
         <noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
-        <link rel="shortcut icon" type="image/png" href="assets/css/images/Seal_of_University_of_California,_Berkeley.png"/>
+        <link rel="shortcut icon" type="image/png" href="res/icon.png"/>
     </head>
     <body class="is-preload">
 
@@ -22,24 +22,23 @@
             <header id="header" class="alt">
                 <h1>Autonomous Racing</h1>
                 <h1>with Data-Driven Control</h1>
-                <h2>EECS 206B Final Project</h2>
+                <h2>
+                    <a href="https://github.com/aysaha/racecar_control">EECS 206B Final Project</a>
+                </h2>
 
-                <iframe class="youtube"
-                        src="https://www.youtube.com/embed/46xs_KCOxsg"
-                        width="69%"
-                        height="480"
-                        frameborder="0"
-                        allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-                        allowfullscreen>
-                </iframe>
+                <div class="aspect-ratio">
+                    <iframe src="https://www.youtube.com/embed/46xs_KCOxsg"
+                            frameborder="0"
+                            allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+                            allowfullscreen>
+                    </iframe>
+                </div>
 
-                <h3><a href="https://github.com/aysaha/racecar_control">Source</a></h3>
-
-                <p>
+                <h3>
                     <a href="https://www.linkedin.com/in/ayusmansaha">Ayusman Saha</a> |
                     <a href="https://www.linkedin.com/in/leotoulet">Léo Toulet</a> |
                     <a href="https://fdesousa.fr">Philippe Ferreira De Sousa</a>
-                </p>
+                </h3>
             </header>
 
             <!-- Nav -->
@@ -63,22 +62,12 @@
                             </header>
 
                             <p style="text-align: justify;">
-                                Autonomous racing is a subset of self-driving that deals with
-                                navigating a vehicle around a track in the shortest amount of time.
-                                Because racing involves fast maneuvers, control logic has to be
-                                computed efficiently to ensure real-time performance.
-                                Stability is also important since optimal performance occurs close
-                                to the limits of the system.
-                                This is difficult in situations with unknown dynamics.
+                                Autonomous racing is a subset of self-driving that deals with navigating a vehicle around a track in the shortest amount of time. Because racing involves fast maneuvers, control logic has to be computed efficiently to ensure real-time performance. Stability is also important since optimal performance occurs close
+                                to the limits of the system. This is difficult in situations with unknown dynamics.
 
                                 </br></br>
 
-                                We present two data-driven control laws for solving this problem 
-                                in a modified version of OpenAI Gym's CarRacing-v0 environment.
-                                The first is a model-free approach that uses reinforcement learning
-                                to determine the best action at the current state.
-                                The second is a model-based approach that applies model predictive
-                                control with system dynamics learned from data.
+                                We present two data-driven control laws for solving this problem in a modified version of OpenAI Gym's CarRacing-v0 environment. The first is a model-free approach that uses reinforcement learning to determine the best action at the current state. The second is a model-based approach that applies model predictive control with system dynamics learned from data.
                             </p>
                         </div>
 
@@ -97,19 +86,11 @@
                             </header>
 
                             <p style="text-align: justify;">
-                                DDPG is used for the reinforcement learning controller.
-                                The reward function encourages movement and penalizes deviations
-                                away from the centerline of the track. Rigid body transformations
-                                are used to express the waypoint position and linear velocity
-                                in the reference frame of the vehicle. This greatly simplifies the
-                                learning process.
+                                DDPG is used for the reinforcement learning controller. The reward function encourages movement and penalizes deviations away from the centerline of the track. Rigid body transformations are utilized to express the waypoint position and linear velocity in the reference frame of the vehicle. This greatly simplifies the learning process.
 
                                 </br></br>
 
-                                For model predictive control, the dynamics are approximated with a
-                                neural network trained on data collected from human driving. 
-                                A lightweight model is used to ensure real-time performance and is
-                                updated every lap with on-policy training.
+                                For model predictive control, the dynamics are approximated with a neural network trained on data collected from human driving. A lightweight model is employed to ensure real-time performance and is updated every lap with on-policy training.
                             </p>
 
                             <div style="display: flex; justify-content: center;">
@@ -136,15 +117,7 @@
                             </header>
 
                             <p style="text-align: justify;">
-                                The controllers ran 10 laps around a track and the lap times were
-                                recorded.
-                                Proportional control was used as a baseline to compare against.
-                                Reinforcement learning control was the slowest but maintained
-                                system stability.
-                                Model predictive control was the fastest but was computaionally 
-                                expensive.
-                                Unlike proportional control, both methods could adapt to different
-                                tracks and achieve peak performance without changing parameters.
+                                The controllers were tested by driving 10 laps around a track. Proportional control was used as a baseline to compare against. Reinforcement learning control had the slowest lap times but maintained system stability. Model predictive control had the fastest lap times but was computaionally expensive. Unlike proportional control, both methods could adapt to different tracks and achieve peak performance without retuning parameters.
                             </p>
 
                             <table style="width:100%; text-align: center;">

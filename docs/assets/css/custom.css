@@ -1,7 +1,18 @@
 code {
     padding: 0.05em 0.65em;
 }
+.aspect-ratio {
+    margin: 10px auto 10px auto;
+    position: relative;
+    width: 75%;
+    height: 0;
+    padding-bottom: 42.1875%;
+}
 
-.youtube {
-    border: 3px solid #222222;
+.aspect-ratio iframe {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
 }
