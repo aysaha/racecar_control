@@ -5,3 +5,8 @@ code {
 .youtube {
     border: 3px solid #222222;
 }
+
+.left-image {
+    margin-left: 0 !important;
+    margin-right: 4em;
+}
