@@ -34,6 +34,7 @@
                 </iframe>
 
                 <h3><a href="https://github.com/aysaha/racecar_control">Source</a></h3>
+
                 <p>
                     <a href="https://www.linkedin.com/in/ayusmansaha">Ayusman Saha</a> |
                     <a href="https://www.linkedin.com/in/leotoulet">Léo Toulet</a> |
@@ -47,7 +48,6 @@
                     <li><a href="#overview" class="active">Overview</a></li>
                     <li><a href="#implementation">Implementation</a></li>
                     <li><a href="#results">Results</a></li>
-                    <li><a href="#summary">Summary</a></li>
                     <li><a href="#team">Team</a></li>
                 </ul>
             </nav>
@@ -61,24 +61,28 @@
                             <header class="major">
                                 <h2>Overview</h2>
                             </header>
+
                             <p style="text-align: justify;">
                                 Autonomous racing is a subset of self-driving that deals with
                                 navigating a vehicle around a track in the shortest amount of time.
                                 Because racing involves fast maneuvers, control logic has to be
-                                computed efficiently to ensure real-time performance. Stability is
-                                also important since optimal performance occurs close to the limits
-                                of the system. This is difficult in situations with unknown 
-                                dynamics.</br></br>
+                                computed efficiently to ensure real-time performance.
+                                Stability is also important since optimal performance occurs close
+                                to the limits of the system.
+                                This is difficult in situations with unknown dynamics.
+
+                                </br></br>
 
                                 We present two data-driven control laws for solving this problem 
                                 in a modified version of OpenAI Gym's CarRacing-v0 environment.
                                 The first is a model-free approach that uses reinforcement learning
-                                to determine the best control input at a given state. The second is
-                                a model-based approach that applies model predictive control with
-                                learned system dynamics.
+                                to determine the best action at the current state.
+                                The second is a model-based approach that applies model predictive
+                                control with system dynamics learned from data.
                             </p>
                         </div>
-                        <div style="display: flex; justify-content: flex-end">
+
+                        <div style="display: flex; justify-content: center;">
                                 <img style="position:relative; top: 60px; width: 90%"
                                      src="res/human_control.gif"/>
                         </div>
@@ -91,13 +95,33 @@
                             <header class="major">
                                 <h2>Implementation</h2>
                             </header>
+
                             <p style="text-align: justify;">
-                                TODO
+                                DDPG is used for the reinforcement learning controller.
+                                The reward function encourages movement and penalizes deviations
+                                away from the centerline of the track. Rigid body transformations
+                                are used to express the waypoint position and linear velocity
+                                in the reference frame of the vehicle. This greatly simplifies the
+                                learning process.
+
+                                </br></br>
+
+                                For model predictive control, the dynamics are approximated with a
+                                neural network trained on data collected from human driving. 
+                                A lightweight model is used to ensure real-time performance and is
+                                updated every lap with on-policy training.
                             </p>
-                            <div style="display: flex; justify-content: center">
-                                <img style="width:30%;margin:0px 5px;" src="res/p_control.gif"/>
-                                <img style="width:30%;margin:0px 5px;" src="res/rl_control.gif"/>
-                                <img style="width:30%;margin:0px 5px;" src="res/mpc.gif"/>
+
+                            <div style="display: flex; justify-content: center;">
+                                <figure style="width: 100%; text-align: center;">
+                                    <img style="width: 45%; margin: 10px 10px;"
+                                         src="res/training_car.gif"/>
+                                    <img style="width: 45%; margin: 10px 10px;"
+                                         src="res/training_graph.gif"/>
+                                    <figcaption style="text-align: center;">
+                                        Learning System Dynamics
+                                    </figcaption>
+                                </figure>
                             </div>
                         </div>
                     </div>
@@ -110,33 +134,76 @@
                             <header class="major">
                                 <h2>Results</h2>
                             </header>
+
                             <p style="text-align: justify;">
-                                TODO
+                                The controllers ran 10 laps around a track and the lap times were
+                                recorded.
+                                Proportional control was used as a baseline to compare against.
+                                Reinforcement learning control was the slowest but maintained
+                                system stability.
+                                Model predictive control was the fastest but was computaionally 
+                                expensive.
+                                Unlike proportional control, both methods could adapt to different
+                                tracks and achieve peak performance without changing parameters.
                             </p>
-                            <div style="display: flex; justify-content: center">
-                                <img style="width:40%;margin:0px 10px;" src="res/training_car.gif"/>
-                                <img style="width:40%;margin:0px 10px;" src="res/training_graph.gif"/>
+
+                            <table style="width:100%; text-align: center;">
+                                <tr>
+                                    <th style="text-align: center;">Controller</th>
+                                    <th style="text-align: center;">Best Lap Time</th>
+                                    <th style="text-align: center;">Worst Lap Time</th>
+                                    <th style="text-align: center;">Average Lap Time</th>
+                                </tr>
+
+                                <tr>
+                                    <td>Proportional Control</td>
+                                    <td>18.300s</td>
+                                    <td>19.080s</td>
+                                    <td>18.378s</td>
+                                </tr>
+
+                                <tr>
+                                    <td>Reinforcement Learning Control</td>
+                                    <td>23.040s</td>
+                                    <td>25.140s</td>
+                                    <td>23.698s</td>
+                                </tr>
+
+                                <tr>
+                                    <td>Model Predictive Control</td>
+                                    <td>15.920s</td>
+                                    <td>21.500s</td>
+                                    <td>17.880s</td>
+                                </tr>
+                            </table>
+
+                            <div style="display: flex; justify-content: center;">
+                                <figure style="margin: 10px 10px;">
+                                    <img style="width: 100%;" src="res/p_control.gif"/>
+                                    <figcaption style="text-align: center;">
+                                        Proportional Control
+                                    </figcaption>
+                                </figure>
+
+                                <figure style="margin: 10px 10px;">
+                                    <img style="width: 100%;" src="res/rl_control.gif"/>
+                                    <figcaption style="text-align: center;">
+                                        Reinforcement Learning Control
+                                    </figcaption>
+                                </figure>
+
+                                <figure style="margin: 10px 10px;">
+                                    <img style="width: 100%;" src="res/mpc.gif"/>
+                                    <figcaption style="text-align: center;">
+                                        Model Predictive Control
+                                    </figcaption>
+                                </figure>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <!-- Summary -->
-                <section id="summary" class="main">
-                    <div class="spotlight">
-                        <div class="content">
-                            <header class="major">
-                                <h2>Summary</h2>
-                            </header>
-                            <p style="text-align: justify;">
-                                TODO
-                            </p>
-                        </div>
-                    </div>
-                </section>
-
                 <!-- Team -->
-
                 <section id="team" class="main">
                     <div class="spotlight">
                         <div class="content">
@@ -149,7 +216,10 @@
                     <div class="spotlight">
                         <div class="content">
                             <p style="text-align: justify;">
-                                Ayusman is ...
+                                Ayusman is a graduate student in Electrical Engineering
+                                and Computer Sciences at University of California, 
+                                Berkeley. He is part of the Master of Engineering program and is
+                                specializing in robotics and embedded software.
                             </p>
                         </div>
                         <span class="image"><img src="res/ayusman.jpg"/></span>
@@ -158,7 +228,10 @@
                     <div class="spotlight">
                         <div class="content">
                             <p style="text-align: justify;">
-                                Léo is ...
+                                Léo is a graduate student in Electrical Engineering
+                                and Computer Sciences at University of California, 
+                                Berkeley. He is part of the Master of Engineering program and is
+                                specializing in robotics and embedded software.
                             </p>
                         </div>
                         <span class="image"><img src="res/leo.jpg"/></span>
@@ -167,7 +240,9 @@
                     <div class="spotlight">
                         <div class="content">
                             <p style="text-align: justify;">
-                                Philippe is ...
+                                Philippe is a graduate student in Industrial Engineering and
+                                Operations Research at University of California, 
+                                Berkeley. He is part of the Master of Engineering program.
                             </p>
                         </div>
                         <span class="image"><img src="res/philippe.jpg"/></span>
