@@ -57,7 +57,7 @@ class AbstractAgent(ABC):
         self.device = device
         self.memory = ReplayMemory(self.config['MEMORY_CAPACITY'])
         #self.eval_env = NormalizedActions(gym.make(**self.config['GAME']))
-        self.eval_env = gym.make('CarRacing-v1', seed = 0x5c807aa31ca77693).env
+        self.eval_env = gym.make('CarRacing-v1').env
         self.continuous = bool(self.eval_env.action_space.shape)
 
         self.state_size = 11 #self.eval_env.observation_space.shape[0]
