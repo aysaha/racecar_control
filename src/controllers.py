@@ -47,7 +47,7 @@ class RobotController:
         # default linear solver: 'mumps'
         # external linear solvers: 'ma27', 'ma57', 'ma77', 'ma86', 'ma97'
         # available from http://www.hsl.rl.ac.uk/ipopt/
-        self.optimizer.options['linear_solver'] = 'ma57'
+        #self.optimizer.options['linear_solver'] = 'ma57'
 
     def on_key_press(self, k, mod):
         if k == key.Q:
