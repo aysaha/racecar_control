@@ -16,3 +16,8 @@ code {
     top: 0;
     left: 0;
 }
+
+.left-image {
+    margin-left: 0 !important;
+    margin-right: 4em;
+}
