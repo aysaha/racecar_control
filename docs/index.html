@@ -62,7 +62,7 @@
                             </header>
 
                             <p style="text-align: justify;">
-                                Autonomous racing is a subset of self-driving that deals with navigating a vehicle around a track in the shortest amount of time. Because racing involves fast maneuvers, control logic has to be computed efficiently to ensure real-time performance. Stability is also important since optimal performance occurs close
+                                Autonomous racing is a subset of self-driving that deals with navigating around a track in the shortest amount of time. Because racing involves fast maneuvers, control logic has to be computed efficiently. Stability is critical since optimal performance occurs close
                                 to the limits of the system. This is difficult in situations with unknown dynamics.
 
                                 </br></br>
@@ -72,7 +72,7 @@
                         </div>
 
                         <div style="display: flex; justify-content: center;">
-                                <img style="position:relative; top: 60px; width: 90%"
+                                <img style="position:relative; margin: 7em auto 1em auto; width: 90%;"
                                      src="res/human_control.gif"/>
                         </div>
                 </section>
@@ -90,7 +90,7 @@
 
                                 </br></br>
 
-                                For model predictive control, the dynamics are approximated with a neural network trained on data collected from human driving. A lightweight model is employed to ensure real-time performance and is updated every lap with on-policy training.
+                                For model predictive control, the dynamics are approximated with a neural network trained on data collected from human driving. A lightweight model is employed to achieve real-time performance and is updated every lap with on-policy training.
                             </p>
 
                             <div style="display: flex; justify-content: center;">
@@ -117,7 +117,7 @@
                             </header>
 
                             <p style="text-align: justify;">
-                                The controllers were tested by driving 10 laps around a track. Proportional control was used as a baseline to compare against. Reinforcement learning control had the slowest lap times but maintained system stability. Model predictive control had the fastest lap times but was computaionally expensive. Unlike proportional control, both methods could adapt to different tracks and achieve peak performance without retuning parameters.
+                                The controllers were tested by driving 10 laps around a track. Proportional control was used as a baseline to compare against. Reinforcement learning control had the slowest lap times but maintained system stability. Model predictive control had the fastest lap times but was computaionally expensive. Unlike proportional control, both methods could adapt to different tracks and attain peak performance without retuning parameters.
                             </p>
 
                             <table style="width:100%; text-align: center;">
